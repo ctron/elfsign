@@ -12,9 +12,25 @@ Unless, you would sign the binary.
 The idea of this PoC is to sign ELF binaries, ensuring that the information inside it was indeed created by the person
 who created the binary.
 
+There is a bit of documentation in the [docs/](docs/) folder.
+
 ## State
 
 This is a PoC. It most likely is full of bugs and far from finished.
+
+## Usage (the idea)
+
+Sign with Sigstore:
+
+```shell
+elfsign sign my-bin my-bin-signed
+```
+
+Validate with:
+
+```shell
+elfsign verify my-bin-signed
+```
 
 ## ToDo
 
