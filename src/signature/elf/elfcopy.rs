@@ -1,61 +1,22 @@
-use crate::signature::digest::digest;
+//! This is taken from the `object` crate's examples (`elfcopy`).
+//!
+//! It contains some modifications to amend the signature section.
+
+// FIXME: handle the case of an existing signature section
+
 use crate::signature::{
-    Signatures, SignerConfiguration, SIGNATURE_V1_SECTION, SIGNATURE_V1_SECTION_ALIGN,
+    elf::{create_signature, sign_raw, Processor},
+    SignerConfiguration, SIGNATURE_V1_SECTION, SIGNATURE_V1_SECTION_ALIGN,
 };
 use crate::utils::ElfType;
 use anyhow::{anyhow, bail};
 use object::elf;
-use object::read::elf::{Dyn, ElfFile, FileHeader, ProgramHeader, Rel, Rela, SectionHeader, Sym};
+use object::read::elf::{Dyn, FileHeader, ProgramHeader, Rel, Rela, SectionHeader, Sym};
 use object::Endianness;
 use std::convert::TryInto;
 use std::fs;
 use std::path::Path;
 
-pub trait Processor<'data, Elf>
-where
-    Elf: ElfType,
-{
-    fn run(self, file: ElfFile<'data, Elf::File>) -> anyhow::Result<Signatures>;
-}
-
-impl<'data, Elf, F> Processor<'data, Elf> for F
-where
-    Elf: ElfType,
-    F: FnOnce(ElfFile<'data, Elf::File>) -> anyhow::Result<Signatures>,
-{
-    fn run(self, file: ElfFile<'data, Elf::File>) -> anyhow::Result<Signatures> {
-        self(file)
-    }
-}
-
-pub fn process_sign<S: SignerConfiguration, Elf>(
-    signer: &S,
-    elf: ElfFile<Elf>,
-) -> anyhow::Result<Signatures>
-where
-    Elf: FileHeader,
-{
-    let digest = digest::<S::Digest, _>(elf)?;
-
-    log::warn!("ELF digest: {}", base16::encode_lower(&digest));
-    let signature = crate::signature::sign::sign(signer, digest)?;
-
-    Ok(Signatures {
-        signatures: vec![signature],
-    })
-}
-
-fn sign_raw<'data, Elf: ElfType>(
-    in_data: &'data [u8],
-    processor: impl Processor<'data, Elf>,
-) -> anyhow::Result<Vec<u8>> {
-    let elf = ElfFile::<'data, Elf::File>::parse(in_data)?;
-    let endian = elf.endian();
-    let signatures = processor.run(elf)?;
-    Ok(signatures.render_data::<Elf>(endian))
-}
-
-// this is taken from the `object` crate's examples (`elfcopy`).
 pub(crate) fn elfcopy<P1, P2, S>(
     in_file_path: P1,
     out_file_path: P2,
@@ -69,26 +30,7 @@ where
     let in_file_path = in_file_path.as_ref();
     let out_file_path = out_file_path.as_ref();
 
-    let in_file = match fs::File::open(in_file_path) {
-        Ok(file) => file,
-        Err(err) => {
-            bail!(
-                "Failed to open file '{}': {}",
-                in_file_path.to_string_lossy(),
-                err
-            );
-        }
-    };
-    let in_data = match unsafe { memmap2::Mmap::map(&in_file) } {
-        Ok(mmap) => mmap,
-        Err(err) => {
-            bail!(
-                "Failed to map file '{}': {}",
-                in_file_path.to_string_lossy(),
-                err,
-            );
-        }
-    };
+    let in_data = fs::read(in_file_path)?;
     let in_data = &*in_data;
 
     let kind = match object::FileKind::parse(in_data) {
@@ -98,12 +40,12 @@ where
         }
     };
     let out_data = match kind {
-        object::FileKind::Elf32 => {
-            copy_file::<elf::FileHeader32<Endianness>>(in_data, |file| process_sign(&signer, file))?
-        }
-        object::FileKind::Elf64 => {
-            copy_file::<elf::FileHeader64<Endianness>>(in_data, |file| process_sign(&signer, file))?
-        }
+        object::FileKind::Elf32 => copy_file::<elf::FileHeader32<Endianness>>(in_data, |file| {
+            create_signature(&signer, &file)
+        })?,
+        object::FileKind::Elf64 => copy_file::<elf::FileHeader64<Endianness>>(in_data, |file| {
+            create_signature(&signer, &file)
+        })?,
         _ => {
             bail!("Not an ELF file");
         }
@@ -150,7 +92,6 @@ fn copy_file<'data, Elf: ElfType<Endian = Endianness>>(
     in_data: &'data [u8],
     processor: impl Processor<'data, Elf>,
 ) -> anyhow::Result<Vec<u8>> {
-    // TODO: sigstore
     let sig_data = sign_raw(in_data, processor)?;
 
     // elfcopy

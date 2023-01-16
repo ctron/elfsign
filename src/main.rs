@@ -1,11 +1,10 @@
-use crate::command::sign;
+use crate::command::{sign, verify};
 use clap::{Parser, Subcommand};
 use log::LevelFilter;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use std::ffi::OsString;
 
 mod command;
-mod elfcopy;
 pub(crate) mod signature;
 mod utils;
 
@@ -30,6 +29,10 @@ enum Command {
         input: OsString,
         #[arg()]
         output: OsString,
+    },
+    Verify {
+        #[arg()]
+        input: OsString,
     },
 }
 
@@ -64,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Sign { input, output } => sign::run(sign::Options { input, output }).await?,
+        Command::Verify { input } => verify::run(verify::Options { input }).await?,
     }
 
     Ok(())

@@ -9,7 +9,6 @@ clap = { version = "4", features = ["derive", "cargo"] }
 digest = "0.10.6"
 hex-literal = "0.3"
 log = "0.4"
-memmap2 = "0.5.8"
 object = { version = "0.30", features = ["all"] }
 sigstore = "0.6"
 simplelog = "0.12.0"
@@ -22,3 +21,5 @@ base16 = "0.2.1"
 sha2 = "0.10.6"
 ed25519 = "1.5.2"
 ed25519-dalek-fiat = "0.1.0"
+ecdsa = "0.14.8"
+p256 = "0.11.1"
