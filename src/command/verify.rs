@@ -91,8 +91,6 @@ fn verify_signatures<Elf: ElfType>(
                 }
             }
         }
-        // TODO: calc digest
-        // TODO: verify signature
         // TODO: verify certificate (maybe outside here, apply policies)
     }
 

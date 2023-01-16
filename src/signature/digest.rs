@@ -38,6 +38,10 @@ where
             );
         }
 
+        // FIXME: need to figure out if we need the segments.
+        // They do change due to the signature process. However, the segments are described
+        // by the sections which we process below.
+        /*
         log::debug!("Processing segments");
 
         for segment in self.file.segments() {
@@ -53,12 +57,18 @@ where
                 );
             }
         }
+         */
 
         log::debug!("Processing sections");
 
         for section in self.file.sections() {
             let name = section.name()?;
             if name == SIGNATURE_V1_SECTION {
+                continue;
+            }
+            if name == ".shstrtab" {
+                // FIXME: we need to find a way to deal with this
+                // only digest the strings, but ignore the SIGNATURE_V1_SECTION string
                 continue;
             }
 
