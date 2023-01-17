@@ -39,9 +39,11 @@ elfsign verify my-bin-signed
   * [ ] Check it is really everything
   * [ ] Re-iterate over digesting the "program sections" (aka "memory segments")
   * [ ] Add more fields from the header
+  * [ ] Add data from `.shstrtab` (minus the `.note.signature.v1` string)
 * [x] Implement sign & store
-* [ ] Improve storing stuff, this is a mess right now
+  * [ ] Implement re-signing 
+* [x] Improve storing stuff, this is a mess right now (good for now)
 * [ ] Implement verify
   * [x] verify the signature
   * [ ] add the certificate, and allow enforcing policies 
-* [ ] check using "digest" vs "digested signer"
+* [x] check using "digest" vs "digested signer"
