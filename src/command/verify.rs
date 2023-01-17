@@ -6,17 +6,17 @@ use crate::{
     utils::ElfType,
 };
 use anyhow::{anyhow, bail};
-use ecdsa::elliptic_curve::pkcs8::DecodePublicKey;
+use digest::Digest;
 use ecdsa::VerifyingKey;
-use ed25519_dalek_fiat::PublicKey;
 use object::{
     elf,
     read::elf::{ElfFile, FileHeader, SectionHeader},
     Endianness,
 };
 use p256::NistP256;
-use sha2::{Sha256, Sha512};
-use signature::Verifier;
+use p384::NistP384;
+use sha2::{Sha256, Sha384};
+use signature::{DigestVerifier, SignatureEncoding};
 use std::ffi::OsString;
 use std::fs;
 
@@ -71,22 +71,18 @@ fn verify_signatures<Elf: ElfType>(
     for signature in signatures {
         match signature.r#type {
             SignatureNoteType::SignatureEcdsa256Sha256 => {
-                let digest = digest::<Sha256, _>(file)?;
-                let public_key =
-                    VerifyingKey::<NistP256>::from_public_key_der(&signature.public_key)?;
-                if verify_signature(&public_key, &digest, &signature) {
+                let mut d = Sha256::new();
+                digest(&mut d, file)?;
+                let public_key = VerifyingKey::<NistP256>::from_sec1_bytes(&signature.public_key)?;
+                if verify_signature::<_, ecdsa::Signature<_>, _>(&public_key, d, &signature)? {
                     result.push(signature);
                 }
             }
-            SignatureNoteType::SignatureEd2551Sha512 => {
-                let digest = digest::<Sha512, _>(file)?;
-                let public_key = PublicKey::from_bytes(&signature.public_key)?;
-                log::info!("Digest: {}", base16::encode_lower(&digest));
-                log::info!(
-                    "Public Key: {}",
-                    base16::encode_lower(&signature.public_key)
-                );
-                if verify_signature(&public_key, &digest, &signature) {
+            SignatureNoteType::SignatureEcdsaP384Sha384 => {
+                let mut d = Sha384::new();
+                digest(&mut d, file)?;
+                let public_key = VerifyingKey::<NistP384>::from_sec1_bytes(&signature.public_key)?;
+                if verify_signature::<_, ecdsa::Signature<_>, _>(&public_key, d, &signature)? {
                     result.push(signature);
                 }
             }
@@ -97,20 +93,21 @@ fn verify_signatures<Elf: ElfType>(
     Ok(result)
 }
 
-fn verify_signature<V, S>(verifier: &V, digest: &[u8], signature: &Signature) -> bool
+fn verify_signature<V, S, D>(verifier: &V, digest: D, signature: &Signature) -> anyhow::Result<bool>
 where
-    V: Verifier<S>,
-    S: signature::Signature,
+    V: DigestVerifier<D, S>,
+    S: SignatureEncoding,
+    D: Digest,
 {
-    let signature = match S::from_bytes(&signature.signature) {
+    let signature = match S::try_from(&signature.signature) {
         Ok(signature) => signature,
-        Err(err) => {
-            log::warn!("Failed parse signature: {err}");
-            return false;
+        Err(_) => {
+            log::warn!("Failed parse signature");
+            return Ok(false);
         }
     };
 
-    match verifier.verify(digest, &signature) {
+    Ok(match verifier.verify_digest(digest, &signature) {
         Ok(()) => {
             log::info!("Valid signature found");
             true
@@ -119,7 +116,7 @@ where
             log::warn!("Failed to verify signature: {err}");
             false
         }
-    }
+    })
 }
 
 fn extract_signatures<Elf: ElfType>(

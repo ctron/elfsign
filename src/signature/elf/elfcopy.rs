@@ -196,10 +196,12 @@ fn patch_section_header<Elf: ElfType>(
     );
 }
 
+/// Overwrite a slice with the byte representation of a "pod"
 fn patch_pod<P: Pod>(data: &mut [u8], new: &P) {
     patch(data, bytes_of(new));
 }
 
+/// Overwrite a slice with another
 fn patch(data: &mut [u8], new: &[u8]) {
     assert_eq!(data.len(), new.len(), "Patch length don't match");
     let len = min(data.len(), new.len());

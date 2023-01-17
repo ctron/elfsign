@@ -606,7 +606,19 @@ dependencies = [
  "der 0.6.1",
  "elliptic-curve",
  "rfc6979",
- "signature",
+ "signature 1.6.4",
+]
+
+[[package]]
+name = "ecdsa"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82508ce57bd2b245e9914411800f87fd8fc8288f501bb26919cb9b2ee964028f"
+dependencies = [
+ "der 0.6.1",
+ "elliptic-curve",
+ "rfc6979",
+ "signature 2.0.0",
 ]
 
 [[package]]
@@ -616,7 +628,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
 dependencies = [
  "pkcs8 0.9.0",
- "signature",
+ "signature 1.6.4",
 ]
 
 [[package]]
@@ -647,15 +659,14 @@ dependencies = [
  "base16",
  "clap",
  "digest 0.10.6",
- "ecdsa",
- "ed25519",
- "ed25519-dalek-fiat",
+ "ecdsa 0.15.0",
  "hex-literal",
  "log",
  "object",
- "p256",
+ "p256 0.12.0",
+ "p384 0.12.0",
  "sha2 0.10.6",
- "signature",
+ "signature 2.0.0",
  "sigstore",
  "simplelog",
  "tokio",
@@ -1633,8 +1644,20 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51f44edd08f51e2ade572f141051021c5af22677e42b7dd28a88155151c33594"
 dependencies = [
- "ecdsa",
+ "ecdsa 0.14.8",
  "elliptic-curve",
+ "sha2 0.10.6",
+]
+
+[[package]]
+name = "p256"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49c124b3cbce43bcbac68c58ec181d98ed6cc7e6d0aa7c3ba97b2563410b0e55"
+dependencies = [
+ "ecdsa 0.15.0",
+ "elliptic-curve",
+ "primeorder",
  "sha2 0.10.6",
 ]
 
@@ -1644,8 +1667,20 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfc8c5bf642dde52bb9e87c0ecd8ca5a76faac2eeed98dedb7c717997e1080aa"
 dependencies = [
- "ecdsa",
+ "ecdsa 0.14.8",
  "elliptic-curve",
+ "sha2 0.10.6",
+]
+
+[[package]]
+name = "p384"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "630a4a9b2618348ececfae61a4905f564b817063bf2d66cdfc2ced523fe1d2d4"
+dependencies = [
+ "ecdsa 0.15.0",
+ "elliptic-curve",
+ "primeorder",
  "sha2 0.10.6",
 ]
 
@@ -1920,6 +1955,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 
 [[package]]
+name = "primeorder"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49b7e10b3a364b1c813238b1c9a749336cbe51fd4265cd99f57cf29302c90af7"
+dependencies = [
+ "elliptic-curve",
+]
+
+[[package]]
 name = "proc-macro-error"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2126,7 +2170,7 @@ dependencies = [
  "pkcs1 0.4.1",
  "pkcs8 0.9.0",
  "rand_core",
- "signature",
+ "signature 1.6.4",
  "smallvec",
  "subtle",
  "zeroize",
@@ -2395,6 +2439,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "signature"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fe458c98333f9c8152221191a77e2a44e8325d0193484af2e9421a53019e57d"
+dependencies = [
+ "digest 0.10.6",
+ "rand_core",
+]
+
+[[package]]
 name = "sigstore"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2404,7 +2458,7 @@ dependencies = [
  "base64",
  "cached",
  "digest 0.10.6",
- "ecdsa",
+ "ecdsa 0.14.8",
  "ed25519",
  "ed25519-dalek-fiat",
  "elliptic-curve",
@@ -2413,8 +2467,8 @@ dependencies = [
  "olpc-cjson",
  "open",
  "openidconnect",
- "p256",
- "p384",
+ "p256 0.11.1",
+ "p384 0.11.2",
  "pem",
  "picky",
  "pkcs1 0.4.1",
@@ -2427,7 +2481,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.6",
- "signature",
+ "signature 1.6.4",
  "thiserror",
  "tokio",
  "tough",

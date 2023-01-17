@@ -1,12 +1,13 @@
 use crate::utils::notes::{Note, NoteWriter};
 use crate::utils::ElfType;
-use ::digest::Digest;
+use ::digest::{Digest, Update};
 use anyhow::bail;
+use signature::{DigestSigner, SignatureEncoding};
 use std::borrow::Cow;
+use std::marker::PhantomData;
 
 pub mod digest;
 pub mod elf;
-pub mod sign;
 
 /// The name of the elf sections containing the signature information
 pub const SIGNATURE_V1_SECTION: &str = ".note.signature-v1";
@@ -19,7 +20,7 @@ pub const ELF_NOTE_SIGNATURE_V1_NAMESPACE: &str = "Signature";
 #[repr(u32)]
 pub enum SignatureNoteType {
     SignatureEcdsa256Sha256 = 1,
-    SignatureEd2551Sha512 = 2,
+    SignatureEcdsaP384Sha384 = 2,
 }
 
 impl TryFrom<u32> for SignatureNoteType {
@@ -27,8 +28,8 @@ impl TryFrom<u32> for SignatureNoteType {
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
-            1 => Ok(SignatureNoteType::SignatureEcdsa256Sha256),
-            2 => Ok(SignatureNoteType::SignatureEd2551Sha512),
+            1 => Ok(Self::SignatureEcdsa256Sha256),
+            2 => Ok(Self::SignatureEcdsaP384Sha384),
             _ => Err(()),
         }
     }
@@ -52,8 +53,8 @@ impl Signature {
     pub fn parse(r#type: SignatureNoteType, data: &[u8]) -> anyhow::Result<Self> {
         log::debug!("Parsing: {:?}", r#type);
         let (public_key, signature) = match r#type {
-            SignatureNoteType::SignatureEcdsa256Sha256 => Self::split(data, 32, 32),
-            SignatureNoteType::SignatureEd2551Sha512 => Self::split(data, 32, 64),
+            SignatureNoteType::SignatureEcdsa256Sha256 => Self::split(data, 1 + 64, 64),
+            SignatureNoteType::SignatureEcdsaP384Sha384 => Self::split(data, 1 + 64, 96),
         }?;
 
         Ok(Signature {
@@ -112,8 +113,58 @@ impl Signatures {
 }
 
 pub trait SignerConfiguration {
-    type Digest: Digest + Clone;
-    fn sign(&self, msg: &[u8]) -> anyhow::Result<Vec<u8>>;
-    fn public_key(&self) -> anyhow::Result<Vec<u8>>;
-    fn r#type(&self) -> SignatureNoteType;
+    fn sign<'f>(
+        &self,
+        f: Box<dyn FnOnce(&mut dyn Update) -> anyhow::Result<()> + 'f>,
+    ) -> anyhow::Result<Signature>;
+}
+
+pub trait VerifyingKeyEncoding {
+    fn to_public_key_vec(&self) -> anyhow::Result<Vec<u8>>;
+}
+
+pub struct DigestSignerWrapper<D, S, DS>
+where
+    D: Digest + Clone,
+    DS: DigestSigner<D, S> + VerifyingKeyEncoding,
+{
+    signer: DS,
+    r#type: SignatureNoteType,
+    _marker: PhantomData<(D, S)>,
+}
+
+impl<D, S, DS> DigestSignerWrapper<D, S, DS>
+where
+    D: Digest + Clone,
+    DS: DigestSigner<D, S> + VerifyingKeyEncoding,
+{
+    pub fn new(signer: DS, r#type: SignatureNoteType) -> Self {
+        Self {
+            signer,
+            r#type,
+            _marker: Default::default(),
+        }
+    }
+}
+
+impl<D, S, DS> SignerConfiguration for DigestSignerWrapper<D, S, DS>
+where
+    D: Digest + Update + Clone,
+    DS: DigestSigner<D, S> + VerifyingKeyEncoding,
+    S: SignatureEncoding,
+{
+    fn sign<'f>(
+        &self,
+        f: Box<dyn FnOnce(&mut dyn Update) -> anyhow::Result<()> + 'f>,
+    ) -> anyhow::Result<Signature> {
+        let mut digest = D::new();
+        f(&mut digest)?;
+        let signature = self.signer.try_sign_digest(digest)?.to_vec();
+        let public_key = self.signer.to_public_key_vec()?;
+        Ok(Signature {
+            signature,
+            public_key,
+            r#type: self.r#type,
+        })
+    }
 }

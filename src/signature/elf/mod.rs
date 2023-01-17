@@ -32,10 +32,15 @@ pub fn create_signature<S: SignerConfiguration, Elf>(
 where
     Elf: FileHeader,
 {
-    let digest = digest::<S::Digest, _>(&elf)?;
+    let signature = signer.sign(Box::new(|d| digest(d, &elf)))?;
 
-    log::info!("ELF digest: {}", base16::encode_lower(&digest));
-    let signature = crate::signature::sign::sign(signer, digest)?;
+    if log::log_enabled!(log::Level::Info) {
+        log::info!("Signature: {}", base16::encode_lower(&signature.signature));
+        log::info!(
+            "Public Key: {}",
+            base16::encode_lower(&signature.public_key)
+        );
+    }
 
     Ok(Signatures {
         signatures: vec![signature],

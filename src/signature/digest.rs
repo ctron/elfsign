@@ -1,6 +1,5 @@
 use crate::signature::SIGNATURE_V1_SECTION;
-use digest::{Digest, Output};
-use log::Level::Debug;
+use digest::Update;
 use object::read::elf::{ElfFile, FileHeader};
 use object::{bytes_of, Object, ObjectSection, U64};
 
@@ -8,21 +7,19 @@ use object::{bytes_of, Object, ObjectSection, U64};
 ///
 /// This must include all information which is relevant in executing the binary. But it must not
 /// contain the signatures itself.
-struct Digester<'data, D, F>
+struct Digester<'d, 'data, F>
 where
-    D: Digest + Clone,
     F: FileHeader,
 {
     file: &'data ElfFile<'data, F>,
-    digest: D,
+    digest: &'d mut dyn Update,
 }
 
-impl<'data, D, F> Digester<'data, D, F>
+impl<'d, 'data, F> Digester<'d, 'data, F>
 where
-    D: Digest + Clone,
     F: FileHeader,
 {
-    pub fn digest(mut self) -> anyhow::Result<Output<D>> {
+    pub fn digest(&mut self) -> anyhow::Result<()> {
         // FIXME: most likely we might want to digest in a different way, by "element", recording the actual information of the process, to make it transparent what we did and what happened
         // FIXME: this function lacks all kind of information which should go into the digest
 
@@ -31,12 +28,13 @@ where
         self.digest
             .update(bytes_of(&U64::new(self.file.endian(), self.file.entry())));
 
+        /*
         if log::log_enabled!(Debug) {
             log::debug!(
                 "Digested entrypoint - state: {}",
                 base16::encode_lower(&self.digest.clone().finalize())
             );
-        }
+        }*/
 
         // FIXME: need to figure out if we need the segments.
         // They do change due to the signature process. However, the segments are described
@@ -72,33 +70,29 @@ where
                 continue;
             }
 
-            if let Some((start, len)) = section.file_range() {
+            if let Some((_, _)) = section.file_range() {
                 let data = section.data()?;
                 self.digest.update(data);
 
+                /*
                 if log::log_enabled!(Debug) {
                     log::debug!(
                         "Digested section ({name}) - start: {start}, len: {len}, check: {}, state: {}",
                         base16::encode_lower(&D::digest(data)),
                         base16::encode_lower(&self.digest.clone().finalize())
                     );
-                }
+                }*/
             }
         }
 
-        Ok(self.digest.finalize())
+        Ok(())
     }
 }
 
 /// Digest a file.
-pub fn digest<D, F>(file: &ElfFile<F>) -> anyhow::Result<Output<D>>
+pub fn digest<F>(digest: &mut dyn Update, file: &ElfFile<F>) -> anyhow::Result<()>
 where
-    D: Digest + Clone,
     F: FileHeader,
 {
-    Digester {
-        file,
-        digest: D::new(),
-    }
-    .digest()
+    Digester { file, digest }.digest()
 }

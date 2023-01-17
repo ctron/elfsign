@@ -13,21 +13,18 @@ readme = "README.md"
 
 [dependencies]
 anyhow = "1"
+base16 = "0.2.1"
 clap = { version = "4", features = ["derive", "cargo"] }
 digest = "0.10.6"
+ecdsa = "0.15.0"
 hex-literal = "0.3"
 log = "0.4"
 object = { version = "0.30", features = ["all"] }
+p256 = "0.12.0"
+p384 = "0.12.0"
+sha2 = "0.10.6"
+signature = {  version = "2.0.0", features = ["digest"] }
 sigstore = "0.6"
 simplelog = "0.12.0"
-signature = "1.6.4"
-
-url = "2"
 tokio = { version = "1", features = ["full"] }
-
-base16 = "0.2.1"
-sha2 = "0.10.6"
-ed25519 = "1.5.3"
-ed25519-dalek-fiat = "0.1.0"
-ecdsa = "0.14.8"
-p256 = "0.11.1"
+url = "2"
