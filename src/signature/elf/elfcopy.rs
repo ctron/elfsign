@@ -1,20 +1,15 @@
-//! This is taken from the `object` crate's examples (`elfcopy`).
-//!
-//! It contains some modifications to amend the signature section.
-
 // FIXME: handle the case of an existing signature section
 
 use crate::signature::{
     elf::{create_signature, sign_raw, Processor},
-    SignerConfiguration, SIGNATURE_V1_SECTION, SIGNATURE_V1_SECTION_ALIGN,
+    SignerConfiguration, SIGNATURE_V1_SECTION,
 };
 use crate::utils::ElfType;
-use anyhow::{anyhow, bail};
-use object::elf::{FileHeader32, FileHeader64, SectionHeader32, SectionHeader64};
-use object::read::elf::{Dyn, ElfFile, FileHeader, ProgramHeader, Rel, Rela, SectionHeader, Sym};
+use anyhow::bail;
+use object::elf::{SectionHeader32, SectionHeader64};
+use object::read::elf::{FileHeader, SectionHeader};
 use object::{bytes_of, elf, Endian, Endianness, Pod, SectionIndex, U16, U32, U64};
 use std::cmp::min;
-use std::convert::TryInto;
 use std::fs;
 use std::path::Path;
 
@@ -99,7 +94,7 @@ fn copy_file<'data, Elf: ElfType<Endian = Endianness>>(
 
     // copy section headers
     let new_section_header_offset = out.len();
-    let section_header_size = (file.e_shentsize(endian) as usize * file.e_shnum(endian) as usize);
+    let section_header_size = file.e_shentsize(endian) as usize * file.e_shnum(endian) as usize;
     out.extend(&in_data[shoff..shoff + section_header_size]);
     let mut new_section_header_count = file.e_shnum(endian);
 

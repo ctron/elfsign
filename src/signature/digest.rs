@@ -2,7 +2,7 @@ use crate::signature::SIGNATURE_V1_SECTION;
 use digest::{Digest, Output};
 use log::Level::Debug;
 use object::read::elf::{ElfFile, FileHeader};
-use object::{bytes_of, Object, ObjectSection, ObjectSegment, U64};
+use object::{bytes_of, Object, ObjectSection, U64};
 
 /// Create a digest of an elf file.
 ///

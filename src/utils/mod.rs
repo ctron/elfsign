@@ -1,7 +1,7 @@
 use crate::utils::notes::NoteHeader;
 use object::elf::{FileHeader32, FileHeader64};
 use object::read::elf::FileHeader;
-use object::{bytes_of, Endian, Endianness, SectionIndex, U32, U64};
+use object::{bytes_of, Endian, SectionIndex, U32, U64};
 
 pub mod notes;
 
