@@ -3,6 +3,13 @@ name = "elfsign"
 version = "0.0.1"
 edition = "2021"
 
+authors = ["Jens Reimann <jreimann@redhat.com>"]
+description = "Tools for signing elf binaries"
+repository = "https://github.com/ctron/elfsign"
+categories = ["command-line-utilities", "development-tools"]
+keywords = ["elf", "sign", "sigstore"]
+readme = "README.md"
+
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive", "cargo"] }
