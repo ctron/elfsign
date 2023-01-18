@@ -2,9 +2,9 @@ use crate::signature::{digest::digest, Signatures, SignerConfiguration};
 use crate::utils::ElfType;
 use object::read::elf::{ElfFile, FileHeader};
 
-mod elfcopy;
+mod sign;
 
-pub(crate) use elfcopy::elfcopy;
+pub(crate) use sign::sign;
 
 /// Process the an elf file to generate a signature
 pub trait Processor<'data, Elf>

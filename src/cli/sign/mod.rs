@@ -29,7 +29,7 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
 
     log::info!("Signing configuration: {configuration:?}");
 
-    elf::elfcopy(
+    elf::sign(
         options.input,
         options.output,
         sigstore::create_signer(configuration).await?,

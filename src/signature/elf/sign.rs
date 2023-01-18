@@ -13,11 +13,7 @@ use std::cmp::min;
 use std::fs;
 use std::path::Path;
 
-pub(crate) fn elfcopy<P1, P2, S>(
-    in_file_path: P1,
-    out_file_path: P2,
-    signer: S,
-) -> anyhow::Result<()>
+pub(crate) fn sign<P1, P2, S>(in_file_path: P1, out_file_path: P2, signer: S) -> anyhow::Result<()>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,

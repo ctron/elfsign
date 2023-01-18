@@ -1,12 +1,13 @@
-use crate::command::{sign, verify};
+use crate::cli::{sign, verify};
 use clap::{Parser, Subcommand};
 use log::LevelFilter;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use std::ffi::OsString;
 
-mod command;
+mod cli;
 pub(crate) mod signature;
 mod utils;
+pub(crate) mod verification;
 
 #[derive(Parser, Debug)]
 struct Cli {

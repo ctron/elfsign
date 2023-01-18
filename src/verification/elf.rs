@@ -5,64 +5,20 @@ use crate::{
     },
     utils::ElfType,
 };
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use digest::Digest;
 use ecdsa::VerifyingKey;
-use object::{
-    elf,
-    read::elf::{ElfFile, FileHeader, SectionHeader},
-    Endianness,
-};
+use object::read::elf::{ElfFile, FileHeader, SectionHeader};
 use p256::NistP256;
 use p384::NistP384;
 use sha2::{Sha256, Sha384};
 use signature::{DigestVerifier, SignatureEncoding};
-use std::ffi::OsString;
-use std::fs;
-
-#[derive(Clone, Debug)]
-pub struct Options {
-    pub input: OsString,
-}
-
-pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
-    let in_data = fs::read(&options.input)?;
-    let in_data = &*in_data;
-
-    let kind = match object::FileKind::parse(in_data) {
-        Ok(file) => file,
-        Err(err) => {
-            bail!("Failed to parse file: {}", err);
-        }
-    };
-    match kind {
-        object::FileKind::Elf32 => verify_file::<elf::FileHeader32<Endianness>>(in_data)?,
-        object::FileKind::Elf64 => verify_file::<elf::FileHeader64<Endianness>>(in_data)?,
-        _ => {
-            bail!("Not an ELF file");
-        }
-    };
-
-    Ok(())
-}
-
-fn verify_file<Elf: ElfType>(data: &[u8]) -> anyhow::Result<()> {
-    let file = Elf::File::parse(data)?;
-    let signatures = extract_signatures::<Elf>(&file, data)?;
-
-    let file = ElfFile::parse(data)?;
-    let signatures = verify_signatures::<Elf>(&file, signatures)?;
-
-    if signatures.is_empty() {
-        bail!("No valid signature found");
-    }
-
-    Ok(())
-}
 
 /// Filter out signatures which don't match the actual digest, or where the signature was not
 /// signed by the provided certificate.
-fn verify_signatures<Elf: ElfType>(
+///
+/// **NOTE:**: This function does not verify any certificate or enforces any other rules.
+pub fn verify_signatures<Elf: ElfType>(
     file: &ElfFile<Elf::File>,
     signatures: Vec<Signature>,
 ) -> anyhow::Result<Vec<Signature>> {
@@ -87,7 +43,6 @@ fn verify_signatures<Elf: ElfType>(
                 }
             }
         }
-        // TODO: verify certificate (maybe outside here, apply policies)
     }
 
     Ok(result)
@@ -119,7 +74,8 @@ where
     })
 }
 
-fn extract_signatures<Elf: ElfType>(
+/// Extract signatures stored in an elf binary.
+pub fn extract_signatures<Elf: ElfType>(
     file: &Elf::File,
     data: &[u8],
 ) -> anyhow::Result<Vec<Signature>> {
