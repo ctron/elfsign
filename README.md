@@ -39,7 +39,7 @@ elfsign verify my-bin-signed
   * [ ] Check it is really everything
   * [ ] Re-iterate over digesting the "program sections" (aka "memory segments")
   * [ ] Add more fields from the header
-  * [ ] Add data from `.shstrtab` (minus the `.note.signature.v1` string)
+  * [x] Add data from `.shstrtab` (minus the `.note.signature.v1` string)
 * [x] Implement sign & store
   * [ ] Implement re-signing 
 * [x] Improve storing stuff, this is a mess right now (good for now)

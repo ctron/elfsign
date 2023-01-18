@@ -1,4 +1,5 @@
 use crate::signature::SIGNATURE_V1_SECTION;
+use anyhow::bail;
 use digest::Update;
 use object::read::elf::{ElfFile, FileHeader};
 use object::{bytes_of, Object, ObjectSection, U64};
@@ -59,6 +60,8 @@ where
 
         log::debug!("Processing sections");
 
+        let mut section_header_string_table = None;
+
         for section in self.file.sections() {
             let name = section.name()?;
             if name == SIGNATURE_V1_SECTION {
@@ -67,6 +70,8 @@ where
             if name == ".shstrtab" {
                 // FIXME: we need to find a way to deal with this
                 // only digest the strings, but ignore the SIGNATURE_V1_SECTION string
+                // record this for later
+                section_header_string_table = Some(section);
                 continue;
             }
 
@@ -84,6 +89,33 @@ where
                 }*/
             }
         }
+
+        // process the section headers string table last
+        if let Some(section) = section_header_string_table {
+            let data = section.data()?;
+            let mut current = vec![];
+            // Iterate over all the bytes. The string table is expected to always end with a null
+            // byte, so we can just scoop up bytes and apply them until we hit a null byte, and then
+            // reset.
+            for b in data {
+                if *b == b'\0' {
+                    // skip the name for the signature section
+                    if current != SIGNATURE_V1_SECTION.as_bytes() {
+                        self.digest.update(&current);
+                    }
+                    current.clear();
+                } else {
+                    current.push(*b);
+                }
+            }
+            if !current.is_empty() {
+                // The data was supposed to end with a null, which would have caused clearing the
+                // buffer. Still, we have trailing data.
+                bail!("Found trailing string data, unable to process");
+            }
+        }
+
+        // done
 
         Ok(())
     }
