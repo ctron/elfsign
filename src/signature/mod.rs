@@ -1,10 +1,11 @@
-use crate::utils::notes::{Note, NoteWriter};
-use crate::utils::ElfType;
+use crate::utils::{
+    notes::{Note, NoteWriter},
+    ElfType,
+};
 use ::digest::{Digest, Update};
 use anyhow::bail;
 use signature::{DigestSigner, SignatureEncoding};
-use std::borrow::Cow;
-use std::marker::PhantomData;
+use std::{borrow::Cow, marker::PhantomData};
 
 pub mod digest;
 mod sign;
@@ -21,7 +22,7 @@ pub const ELF_NOTE_SIGNATURE_V1_NAMESPACE: &str = "Signature";
 #[derive(Copy, Clone, Debug)]
 #[repr(u32)]
 pub enum SignatureNoteType {
-    SignatureEcdsa256Sha256 = 1,
+    SignatureEcdsaP256Sha256 = 1,
     SignatureEcdsaP384Sha384 = 2,
 }
 
@@ -30,7 +31,7 @@ impl TryFrom<u32> for SignatureNoteType {
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
-            1 => Ok(Self::SignatureEcdsa256Sha256),
+            1 => Ok(Self::SignatureEcdsaP256Sha256),
             2 => Ok(Self::SignatureEcdsaP384Sha384),
             _ => Err(()),
         }
@@ -55,7 +56,7 @@ impl Signature {
     pub fn parse(r#type: SignatureNoteType, data: &[u8]) -> anyhow::Result<Self> {
         log::debug!("Parsing: {:?}", r#type);
         let (public_key, signature) = match r#type {
-            SignatureNoteType::SignatureEcdsa256Sha256 => Self::split(data, 1 + 64, 64),
+            SignatureNoteType::SignatureEcdsaP256Sha256 => Self::split(data, 1 + 64, 64),
             SignatureNoteType::SignatureEcdsaP384Sha384 => Self::split(data, 1 + 64, 96),
         }?;
 

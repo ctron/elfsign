@@ -26,7 +26,7 @@ pub fn verify_signatures<Elf: ElfType>(
 
     for signature in signatures {
         match signature.r#type {
-            SignatureNoteType::SignatureEcdsa256Sha256 => {
+            SignatureNoteType::SignatureEcdsaP256Sha256 => {
                 let mut d = Sha256::new();
                 digest(&mut d, file)?;
                 let public_key = VerifyingKey::<NistP256>::from_sec1_bytes(&signature.public_key)?;

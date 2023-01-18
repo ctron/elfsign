@@ -12,7 +12,7 @@ pub enum Configuration {
 impl From<Configuration> for SignatureNoteType {
     fn from(value: Configuration) -> Self {
         match value {
-            Configuration::EcdsaP256Sha256 => Self::SignatureEcdsa256Sha256,
+            Configuration::EcdsaP256Sha256 => Self::SignatureEcdsaP256Sha256,
             Configuration::EcdsaP384Sha384 => Self::SignatureEcdsaP384Sha384,
         }
     }

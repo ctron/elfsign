@@ -99,7 +99,7 @@ pub async fn create_signer(
                 _,
             >::new(
                 keys,
-                SignatureNoteType::SignatureEcdsa256Sha256,
+                SignatureNoteType::SignatureEcdsaP256Sha256,
             ))))
         }
         SigStoreKeyPair::ECDSA(ECDSAKeys::P384(keys)) => {
