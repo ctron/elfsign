@@ -46,33 +46,6 @@ impl<D: Digest> From<((SigStoreSigner, FulcioCert), SignatureNoteType)>
     }
 }
 
-/*
-impl<D> SignerConfiguration for SigstoreConfiguration<D>
-where
-    D: Digest + Clone,
-{
-    fn sign<F>(&self, f: F) -> anyhow::Result<Signature>
-    where
-        F: FnOnce(&mut dyn Update) -> anyhow::Result<()>,
-    {
-        match self.0.to_sigstore_keypair()? {
-            SigStoreKeyPair::ECDSA(ECDSAKeys::P256(key)) => Ok(
-                ecdsa::SigningKey::<NistP256>::from_pkcs8_der(&key.private_key_to_der()?)?
-                    .try_sign_digest(digest)?
-                    .to_vec(),
-            ),
-            key => {
-                bail!("Unsupported configuration: {}", key.to_string());
-            }
-        }
-    }
-
-    fn r#type(&self) -> SignatureNoteType {
-        self.2
-    }
-}
- */
-
 impl<C> VerifyingKeyEncoding for SigningKey<C>
 where
     C: PrimeCurve + ProjectiveArithmetic,
@@ -110,6 +83,8 @@ pub async fn create_signer(
     );
 
     let (signer, cert) = fulcio.request_cert(configuration.into()).await?;
+
+    log::warn!("FulcioCert:\n {cert}");
 
     // Unfortunately we cannot just use the sigstore signer, as it only allows to sign "messages",
     // but we have a digest, not a message. So we need to extract the keys and set up the signer
