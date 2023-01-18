@@ -1,7 +1,7 @@
 use crate::signature::SIGNATURE_V1_SECTION;
 use anyhow::bail;
 use digest::Update;
-use object::read::elf::{ElfFile, FileHeader};
+use object::read::elf::{ElfFile, ElfSection, FileHeader};
 use object::{bytes_of, Object, ObjectSection, U64};
 
 /// Create a digest of an elf file.
@@ -91,7 +91,15 @@ where
         }
 
         // process the section headers string table last
-        if let Some(section) = section_header_string_table {
+        self.digest_shstrtab(section_header_string_table)?;
+
+        // done
+
+        Ok(())
+    }
+
+    fn digest_shstrtab(&mut self, section: Option<ElfSection<F>>) -> anyhow::Result<()> {
+        if let Some(section) = section {
             let data = section.data()?;
             let mut current = vec![];
             // Iterate over all the bytes. The string table is expected to always end with a null
@@ -114,9 +122,6 @@ where
                 bail!("Found trailing string data, unable to process");
             }
         }
-
-        // done
-
         Ok(())
     }
 }

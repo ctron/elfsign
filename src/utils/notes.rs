@@ -4,6 +4,7 @@ use object::write::WritableBuffer;
 use object::{bytes_of_slice, Endian, Pod, U32};
 use std::borrow::Cow;
 
+/// An entry on a notes section
 pub struct Note<'n> {
     pub namespace: &'n str,
     pub descriptor: Cow<'n, [u8]>,
