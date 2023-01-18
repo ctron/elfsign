@@ -22,7 +22,9 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
 fn verify_file<Elf: ElfType>(data: &[u8]) -> anyhow::Result<()> {
     let file = ElfFile::parse(data)?;
     let signatures = extract_signatures::<Elf>(&file.raw_header(), data)?;
+    log::info!("Signatures found: {signatures:#?}");
     let signatures = verify_signatures::<Elf>(&file, signatures)?;
+    log::info!("Signatures valid: {signatures:#?}");
 
     if signatures.is_empty() {
         bail!("No valid signature found");

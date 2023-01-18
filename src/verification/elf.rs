@@ -121,7 +121,7 @@ fn parse_signature_section<Elf: ElfType>(
             }
         };
 
-        result.push(Signature::parse(r#type, note.desc())?);
+        result.push(Signature::parse(endian, r#type, note.desc())?);
     }
 
     Ok(result)

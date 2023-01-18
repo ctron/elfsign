@@ -1,22 +1,27 @@
 use super::Configuration;
 use crate::signature::{
-    DigestSignerWrapper, Signature, SignatureNoteType, SignerConfiguration, VerifyingKeyEncoding,
+    DebugCertificateBundle, DigestSignerWrapper, Signature, SignatureNoteType, SignerConfiguration,
+    VerifyingKeyEncoding,
 };
 use anyhow::bail;
 use digest::{Digest, Update};
-use ecdsa::elliptic_curve::generic_array::ArrayLength;
-use ecdsa::elliptic_curve::ops::{Invert, Reduce};
-use ecdsa::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
-use ecdsa::elliptic_curve::subtle::CtOption;
-use ecdsa::elliptic_curve::{sec1, AffinePoint, FieldSize, ProjectiveArithmetic, Scalar};
-use ecdsa::hazmat::SignPrimitive;
-use ecdsa::{PrimeCurve, SignatureSize, SigningKey};
+use ecdsa::elliptic_curve::{
+    generic_array::ArrayLength,
+    ops::{Invert, Reduce},
+    sec1,
+    sec1::{FromEncodedPoint, ToEncodedPoint},
+    subtle::CtOption,
+    AffinePoint, FieldSize, ProjectiveArithmetic, Scalar,
+};
+use ecdsa::{hazmat::SignPrimitive, PrimeCurve, SignatureSize, SigningKey};
 use p256::{pkcs8::DecodePrivateKey, NistP256};
 use p384::NistP384;
 use sha2::{Sha256, Sha384};
-use sigstore::crypto::signing_key::{ecdsa::ECDSAKeys, KeyPair, SigStoreKeyPair};
 use sigstore::{
-    crypto::{SigStoreSigner, SigningScheme},
+    crypto::{
+        signing_key::{ecdsa::ECDSAKeys, KeyPair, SigStoreKeyPair},
+        SigStoreSigner, SigningScheme,
+    },
     fulcio::{oauth::OauthTokenProvider, FulcioCert, FulcioClient, TokenProvider, FULCIO_ROOT},
 };
 use std::marker::PhantomData;
@@ -84,7 +89,16 @@ pub async fn create_signer(
 
     let (signer, cert) = fulcio.request_cert(configuration.into()).await?;
 
-    log::warn!("FulcioCert:\n {cert}");
+    // take the PEM certificate list and convert it into a DER serialize certificate bundle
+    let bundle = x509_parser::pem::Pem::iter_from_buffer(cert.as_ref())
+        .map(|r| r.map(|pem| pem.contents))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    log::warn!("Cert Bundle: {:?}", DebugCertificateBundle(&bundle));
+    if log::log_enabled!(log::Level::Info) {
+        let size: usize = bundle.iter().map(|der| der.len()).sum();
+        log::info!("Cert bundle size: {size}");
+    }
 
     // Unfortunately we cannot just use the sigstore signer, as it only allows to sign "messages",
     // but we have a digest, not a message. So we need to extract the keys and set up the signer
@@ -97,9 +111,11 @@ pub async fn create_signer(
                 Sha256,
                 _,
                 _,
+                _,
             >::new(
                 keys,
                 SignatureNoteType::SignatureEcdsaP256Sha256,
+                bundle,
             ))))
         }
         SigStoreKeyPair::ECDSA(ECDSAKeys::P384(keys)) => {
@@ -108,9 +124,11 @@ pub async fn create_signer(
                 Sha384,
                 _,
                 _,
+                _,
             >::new(
                 keys,
                 SignatureNoteType::SignatureEcdsaP384Sha384,
+                bundle,
             ))))
         }
         keys => {

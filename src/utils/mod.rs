@@ -8,6 +8,8 @@ use object::{
 
 pub mod elf;
 pub mod notes;
+pub mod reader;
+pub mod writer;
 
 pub trait Header<E: Endian> {
     fn section_header_size() -> usize;

@@ -55,5 +55,5 @@ fn sign_raw<'data, Elf: ElfType>(
     let elf = ElfFile::<'data, Elf::File>::parse(in_data)?;
     let endian = elf.endian();
     let signatures = processor.run(elf)?;
-    Ok(signatures.render_data::<Elf>(endian))
+    Ok(signatures.render_as_notes::<Elf>(endian))
 }
