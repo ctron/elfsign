@@ -7,7 +7,9 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 
 pub mod digest;
-pub mod elf;
+mod sign;
+
+pub(crate) use sign::sign;
 
 /// The name of the elf sections containing the signature information
 pub const SIGNATURE_V1_SECTION: &str = ".note.signature-v1";

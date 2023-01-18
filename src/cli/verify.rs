@@ -1,10 +1,10 @@
 use crate::{
-    utils::ElfType,
+    utils::{elf::process_elf, ElfType},
     verification::elf::{extract_signatures, verify_signatures},
 };
 use anyhow::bail;
 use object::{elf, read::elf::ElfFile, Endianness};
-use std::{ffi::OsString, fs};
+use std::ffi::OsString;
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -12,24 +12,11 @@ pub struct Options {
 }
 
 pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
-    let in_data = fs::read(&options.input)?;
-    let in_data = &*in_data;
-
-    let kind = match object::FileKind::parse(in_data) {
-        Ok(file) => file,
-        Err(err) => {
-            bail!("Failed to parse file: {}", err);
-        }
-    };
-    match kind {
-        object::FileKind::Elf32 => verify_file::<elf::FileHeader32<Endianness>>(in_data)?,
-        object::FileKind::Elf64 => verify_file::<elf::FileHeader64<Endianness>>(in_data)?,
-        _ => {
-            bail!("Not an ELF file");
-        }
-    };
-
-    Ok(())
+    process_elf(
+        options.input,
+        verify_file::<elf::FileHeader32<Endianness>>,
+        verify_file::<elf::FileHeader64<Endianness>>,
+    )
 }
 
 fn verify_file<Elf: ElfType>(data: &[u8]) -> anyhow::Result<()> {

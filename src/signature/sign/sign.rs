@@ -1,17 +1,18 @@
 // FIXME: handle the case of an existing signature section
 
-use crate::signature::{
-    elf::{create_signature, sign_raw, Processor},
-    SignerConfiguration, SIGNATURE_V1_SECTION,
+use super::{create_signature, sign_raw, Processor};
+use crate::{
+    signature::{SignerConfiguration, SIGNATURE_V1_SECTION},
+    utils::{elf::process_elf, ElfType},
 };
-use crate::utils::ElfType;
 use anyhow::bail;
-use object::elf::{SectionHeader32, SectionHeader64};
-use object::read::elf::{FileHeader, SectionHeader};
-use object::{bytes_of, elf, Endian, Endianness, Pod, SectionIndex, U16, U32, U64};
-use std::cmp::min;
-use std::fs;
-use std::path::Path;
+use object::{
+    bytes_of,
+    elf::{self, SectionHeader32, SectionHeader64},
+    read::elf::{FileHeader, SectionHeader},
+    Endian, Endianness, Pod, SectionIndex, U16, U32, U64,
+};
+use std::{cmp::min, fs, path::Path};
 
 pub(crate) fn sign<P1, P2, S>(in_file_path: P1, out_file_path: P2, signer: S) -> anyhow::Result<()>
 where
@@ -19,29 +20,21 @@ where
     P2: AsRef<Path>,
     S: SignerConfiguration,
 {
-    let in_file_path = in_file_path.as_ref();
     let out_file_path = out_file_path.as_ref();
 
-    let in_data = fs::read(in_file_path)?;
-    let in_data = &*in_data;
-
-    let kind = match object::FileKind::parse(in_data) {
-        Ok(file) => file,
-        Err(err) => {
-            bail!("Failed to parse file: {}", err);
-        }
-    };
-    let out_data = match kind {
-        object::FileKind::Elf32 => copy_file::<elf::FileHeader32<Endianness>>(in_data, |file| {
-            create_signature(&signer, &file)
-        })?,
-        object::FileKind::Elf64 => copy_file::<elf::FileHeader64<Endianness>>(in_data, |file| {
-            create_signature(&signer, &file)
-        })?,
-        _ => {
-            bail!("Not an ELF file");
-        }
-    };
+    let out_data = process_elf(
+        in_file_path,
+        |data| {
+            created_signed_file::<elf::FileHeader32<Endianness>>(data, |file| {
+                create_signature(&signer, &file)
+            })
+        },
+        |data| {
+            created_signed_file::<elf::FileHeader64<Endianness>>(data, |file| {
+                create_signature(&signer, &file)
+            })
+        },
+    )?;
 
     if let Err(err) = fs::write(&out_file_path, out_data) {
         bail!(
@@ -54,7 +47,8 @@ where
     Ok(())
 }
 
-fn copy_file<'data, Elf: ElfType<Endian = Endianness>>(
+/// takes the data of an elf file and creates a signed version
+fn created_signed_file<'data, Elf: ElfType<Endian = Endianness>>(
     in_data: &'data [u8],
     processor: impl Processor<'data, Elf>,
 ) -> anyhow::Result<Vec<u8>> {

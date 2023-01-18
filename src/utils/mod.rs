@@ -1,8 +1,12 @@
 use crate::utils::notes::NoteHeader;
-use object::elf::{FileHeader32, FileHeader64};
-use object::read::elf::FileHeader;
-use object::{bytes_of, Endian, SectionIndex, U32, U64};
+use object::{
+    bytes_of,
+    elf::{FileHeader32, FileHeader64},
+    read::elf::FileHeader,
+    Endian, SectionIndex, U32, U64,
+};
 
+pub mod elf;
 pub mod notes;
 
 pub trait Header<E: Endian> {
