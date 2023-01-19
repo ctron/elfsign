@@ -2,9 +2,9 @@ use crate::signature::{digest::digest, Signatures, SignerConfiguration};
 use crate::utils::ElfType;
 use object::read::elf::{ElfFile, FileHeader};
 
-mod sign;
+mod elf;
 
-pub(crate) use sign::sign;
+pub(crate) use elf::sign;
 
 /// Process the an elf file to generate a signature
 pub trait Processor<'data, Elf>
@@ -32,7 +32,7 @@ pub fn create_signature<S: SignerConfiguration, Elf>(
 where
     Elf: FileHeader,
 {
-    let signature = signer.sign(Box::new(|d| digest(d, &elf)))?;
+    let signature = signer.sign(Box::new(|d| digest(d, elf)))?;
 
     if log::log_enabled!(log::Level::Info) {
         log::info!("Signature: {}", base16::encode_lower(&signature.signature));

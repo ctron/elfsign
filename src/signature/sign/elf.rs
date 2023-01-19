@@ -14,11 +14,15 @@ use object::{
 };
 use std::{cmp::min, fs, path::Path};
 
-pub(crate) fn sign<P1, P2, S>(in_file_path: P1, out_file_path: P2, signer: S) -> anyhow::Result<()>
+pub(crate) async fn sign<P1, P2, S>(
+    in_file_path: P1,
+    out_file_path: P2,
+    signer: S,
+) -> anyhow::Result<()>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
-    S: SignerConfiguration,
+    S: SignerConfiguration + 'static,
 {
     let out_file_path = out_file_path.as_ref();
 
@@ -36,7 +40,7 @@ where
         },
     )?;
 
-    if let Err(err) = fs::write(&out_file_path, out_data) {
+    if let Err(err) = fs::write(out_file_path, out_data) {
         bail!(
             "Failed to write file '{}': {}",
             out_file_path.to_string_lossy(),
@@ -123,7 +127,7 @@ fn created_signed_file<'data, Elf: ElfType<Endian = Endianness>>(
     );
     patch_pod(
         Elf::e_shnum_mut(&mut out),
-        &U16::new(endian, new_section_header_count as u16),
+        &U16::new(endian, new_section_header_count),
     );
 
     Ok(out)
@@ -195,7 +199,5 @@ fn patch_pod<P: Pod>(data: &mut [u8], new: &P) {
 fn patch(data: &mut [u8], new: &[u8]) {
     assert_eq!(data.len(), new.len(), "Patch length don't match");
     let len = min(data.len(), new.len());
-    for i in 0..len {
-        data[i] = new[i];
-    }
+    data[..len].copy_from_slice(&new[..len]);
 }

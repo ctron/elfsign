@@ -33,7 +33,8 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
         options.input,
         options.output,
         sigstore::create_signer(configuration).await?,
-    )?;
+    )
+    .await?;
 
     Ok(())
 }

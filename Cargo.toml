@@ -13,7 +13,9 @@ readme = "README.md"
 
 [dependencies]
 anyhow = "1"
+async-trait = "0.1"
 base16 = "0.2.1"
+base64 = "0.21.0"
 clap = { version = "4", features = ["derive", "cargo"] }
 digest = "0.10.6"
 ecdsa = "0.15.0"
@@ -22,11 +24,15 @@ object = { version = "0.30", features = ["all"] }
 p256 = "0.12.0"
 p384 = "0.12.0"
 sha2 = "0.10.6"
-signature = {  version = "2.0.0", features = ["digest"] }
+signature = { version = "2.0.0", features = ["digest"] }
 sigstore = "0.6"
 simplelog = "0.12.0"
+thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 url = "2"
-
-base64 = "0.21.0"
 x509-parser = "0.14"
+
+seedwing-policy-engine = { version = "0.1.0", git = "https://github.com/seedwing-io/seedwing-policy", rev = "5117d83556bf205fac919bd48128799c186d2898" }
+
+[patch."https://github.com/seedwing-io/seedwing-policy"]
+seedwing-policy-engine = { path = "../seedwing-policy/seedwing-policy-engine" }

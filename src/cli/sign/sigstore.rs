@@ -1,10 +1,10 @@
 use super::Configuration;
 use crate::signature::{
-    DebugCertificateBundle, DigestSignerWrapper, Signature, SignatureNoteType, SignerConfiguration,
-    VerifyingKeyEncoding,
+    DebugCertificateBundle, DigestFeeder, DigestSignerWrapper, Signature, SignatureNoteType,
+    SignerConfiguration, VerifyingKeyEncoding,
 };
 use anyhow::bail;
-use digest::{Digest, Update};
+use digest::Digest;
 use ecdsa::elliptic_curve::{
     generic_array::ArrayLength,
     ops::{Invert, Reduce},
@@ -71,10 +71,7 @@ where
 pub struct BoxedSignerConfiguration(Box<dyn SignerConfiguration>);
 
 impl SignerConfiguration for BoxedSignerConfiguration {
-    fn sign<'f>(
-        &self,
-        f: Box<dyn FnOnce(&mut dyn Update) -> anyhow::Result<()> + 'f>,
-    ) -> anyhow::Result<Signature> {
+    fn sign<'f>(&self, f: DigestFeeder) -> anyhow::Result<Signature> {
         self.0.sign(f)
     }
 }

@@ -1,0 +1,33 @@
+pattern signed-binary = self-signed || sigstore-signed
+
+pattern self-signed = [ certificate ]
+
+pattern sigstore-signed = [
+    leaf-certificate,
+    intermediate-certificate,
+    root-certificate
+]
+
+pattern certificate = {
+    version: 2,
+}
+
+pattern leaf-certificate = certificate
+
+pattern intermediate-certificate = certificate
+
+pattern root-certificate = certificate && trusted-root
+
+pattern trusted-root = sigstore-root
+
+pattern sigstore-root = {
+    version: 2,
+    subject-pki: {
+        public-key: base64::Base64Encode("BPtd4VPitvc9AbBLghqO0uTf86WemBqeBoFyVimxgGvmL7jKcHTtx5vcs/Q4g5l3F7Ffr1zmJW7IlFD4fPTnKL5QXe4FYCUemJLmyHT4fYYcTtJeuTUQLmbVOvX0v2CD3Q=="),
+    }
+}
+
+pattern subject-alternative-name<EMAIL> = {
+    oid: "1.2.3.4.5",
+    email: EMAIL,
+}

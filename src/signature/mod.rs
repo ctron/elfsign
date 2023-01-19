@@ -88,7 +88,7 @@ pub struct DebugCertificate<'d>(pub &'d Vec<u8>);
 
 impl<'d> Debug for DebugCertificate<'d> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Base64Display::new(&self.0, &base64::engine::general_purpose::STANDARD).fmt(f)
+        Base64Display::new(self.0, &base64::engine::general_purpose::STANDARD).fmt(f)
     }
 }
 
@@ -221,11 +221,10 @@ impl Signatures {
     }
 }
 
+pub type DigestFeeder<'f> = Box<dyn FnOnce(&mut dyn Update) -> anyhow::Result<()> + 'f>;
+
 pub trait SignerConfiguration {
-    fn sign<'f>(
-        &self,
-        f: Box<dyn FnOnce(&mut dyn Update) -> anyhow::Result<()> + 'f>,
-    ) -> anyhow::Result<Signature>;
+    fn sign(&self, f: DigestFeeder) -> anyhow::Result<Signature>;
 }
 
 pub trait VerifyingKeyEncoding {
@@ -278,12 +277,10 @@ where
     S: SignatureEncoding,
     CBE: CertificateBundleEncoding,
 {
-    fn sign<'f>(
-        &self,
-        f: Box<dyn FnOnce(&mut dyn Update) -> anyhow::Result<()> + 'f>,
-    ) -> anyhow::Result<Signature> {
+    fn sign<'f>(&self, f: DigestFeeder) -> anyhow::Result<Signature> {
         let mut digest = D::new();
         f(&mut digest)?;
+
         let signature = self.signer.try_sign_digest(digest)?.to_vec();
         let public_key = self.signer.to_public_key_vec()?;
         let certificate_bundle = self.certificate_bundle.to_certificate_bundle()?;

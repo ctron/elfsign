@@ -109,7 +109,7 @@ impl<'w, W: WritableBuffer, E: ElfType> NoteWriter<'w, W, E> {
                 self.endian,
                 namespace_len as u32,
                 descriptor_len as u32,
-                note.r#type as u32,
+                note.r#type,
             );
         }
 
