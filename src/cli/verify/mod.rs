@@ -1,4 +1,4 @@
-use crate::verification::enforce::CertificateChainEnforcer;
+use crate::verification::enforce::{CertificateBundle, CertificateChainEnforcer};
 use crate::verification::seedwing::SeedwingEnforcer;
 use crate::verification::validator::EnforceCertificateChain;
 use crate::{
@@ -13,7 +13,7 @@ use anyhow::{anyhow, bail};
 use object::{elf, read::elf::ElfFile, Endianness};
 use std::ffi::OsString;
 use x509_parser::der_parser::{oid, Oid};
-use x509_parser::prelude::{ParsedExtension, X509Certificate};
+use x509_parser::prelude::ParsedExtension;
 
 const OID_SAN: Oid = oid!(2.5.29 .17);
 
@@ -114,16 +114,12 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
 }
 
 /// parse all signatures into an array of signature plus certificate bundle
-fn parse_x509(signatures: &[Signature]) -> anyhow::Result<Vec<(&Signature, Vec<X509Certificate>)>> {
+fn parse_x509(signatures: &[Signature]) -> anyhow::Result<Vec<(&Signature, CertificateBundle)>> {
     let mut result = Vec::with_capacity(signatures.len());
     for signature in signatures {
         result.push((
             signature,
-            signature
-                .certificate_bundle
-                .iter()
-                .map(|cert| x509_parser::parse_x509_certificate(&cert).map(|r| r.1))
-                .collect::<Result<Vec<_>, _>>()?,
+            CertificateBundle::try_from(signature.certificate_bundle.as_slice())?,
         ));
     }
 
@@ -141,21 +137,18 @@ fn signatures_from_file<'c, Elf: ElfType>(data: &[u8]) -> anyhow::Result<Vec<Sig
     verify_signatures::<Elf>(&file, signatures)
 }
 
-async fn verify_certificates<'c, E, A>(
-    signatures: &'c [(&'c Signature, A)],
+async fn verify_certificates<'c, E>(
+    signatures: &'c [(&'c Signature, CertificateBundle<'c>)],
     enforcer: &E,
-) -> Vec<(&'c Signature, anyhow::Result<&'c [X509Certificate<'c>]>)>
+) -> Vec<(&'c Signature, anyhow::Result<&'c CertificateBundle<'c>>)>
 where
     E: CertificateChainEnforcer,
-    A: AsRef<[X509Certificate<'c>]> + 'c,
 {
     let mut results = Vec::with_capacity(signatures.len());
 
-    use crate::verification::enforce::CertificateChainEnforcerEx;
-
     for (signature, bundle) in signatures.into_iter() {
         let result = match enforcer.enforce(bundle).await {
-            Ok(()) => Ok(bundle.as_ref()),
+            Ok(()) => Ok(bundle),
             Err(err) => Err(anyhow!(err)),
         };
         results.push((*signature, result));

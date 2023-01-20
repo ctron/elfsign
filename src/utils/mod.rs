@@ -35,21 +35,21 @@ impl<E: Endian> Header<E> for FileHeader32<E> {
         0x028
     }
 
+    fn e_shoff_mut(data: &mut [u8]) -> &mut [u8] {
+        &mut data[0x20..0x20 + Self::WORD]
+    }
+    fn e_shnum_mut(data: &mut [u8]) -> &mut [u8] {
+        &mut data[0x30..0x30 + 2]
+    }
+
     const SH_OFFSET: usize = 0x10;
+
     const SH_SIZE: usize = 0x14;
 
     const WORD: usize = 0x04;
 
     fn word(endian: E, value: usize) -> Vec<u8> {
         bytes_of(&U32::new(endian, value as u32)).to_vec()
-    }
-
-    fn e_shoff_mut(data: &mut [u8]) -> &mut [u8] {
-        &mut data[0x20..0x20 + Self::WORD]
-    }
-
-    fn e_shnum_mut(data: &mut [u8]) -> &mut [u8] {
-        &mut data[0x30..0x30 + 2]
     }
 }
 
@@ -58,21 +58,21 @@ impl<E: Endian> Header<E> for FileHeader64<E> {
         0x40
     }
 
+    fn e_shoff_mut(data: &mut [u8]) -> &mut [u8] {
+        &mut data[0x28..0x28 + Self::WORD]
+    }
+    fn e_shnum_mut(data: &mut [u8]) -> &mut [u8] {
+        &mut data[0x3C..0x3C + 2]
+    }
+
     const SH_OFFSET: usize = 0x18;
+
     const SH_SIZE: usize = 0x20;
 
     const WORD: usize = 0x08;
 
     fn word(endian: E, value: usize) -> Vec<u8> {
         bytes_of(&U64::new(endian, value as u64)).to_vec()
-    }
-
-    fn e_shoff_mut(data: &mut [u8]) -> &mut [u8] {
-        &mut data[0x28..0x28 + Self::WORD]
-    }
-
-    fn e_shnum_mut(data: &mut [u8]) -> &mut [u8] {
-        &mut data[0x3C..0x3C + 2]
     }
 }
 

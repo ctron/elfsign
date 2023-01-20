@@ -738,6 +738,7 @@ dependencies = [
  "signature 2.0.0",
  "sigstore",
  "simplelog",
+ "termcolor",
  "thiserror",
  "tokio",
  "url",

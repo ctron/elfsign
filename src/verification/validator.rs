@@ -1,7 +1,8 @@
-use crate::verification::enforce::{CertificateChainEnforcer, CertificateEnforcer};
+use crate::verification::enforce::{
+    CertificateBundle, CertificateChainEnforcer, CertificateEnforcer,
+};
 use anyhow::bail;
 use async_trait::async_trait;
-use x509_parser::prelude::*;
 
 /// Enforce a certificate chain
 ///
@@ -27,7 +28,7 @@ impl<'e, E> CertificateChainEnforcer for EnforceCertificateChain<'e, E>
 where
     E: CertificateEnforcer,
 {
-    async fn enforce_slice<'c>(&self, bundle: &'c [&'c X509Certificate<'c>]) -> anyhow::Result<()> {
+    async fn enforce<'c>(&self, bundle: &'c CertificateBundle<'c>) -> anyhow::Result<()> {
         if bundle.is_empty() {
             bail!("empty certificate bundle");
         }

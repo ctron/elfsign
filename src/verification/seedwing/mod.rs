@@ -1,10 +1,12 @@
-use crate::verification::enforce::CertificateChainEnforcer;
+use crate::verification::enforce::{CertificateBundle, CertificateChainEnforcer};
+use crate::verification::seedwing::explain::explain;
 use anyhow::bail;
 use async_trait::async_trait;
 use seedwing_policy_engine::lang::builder::Builder;
 use seedwing_policy_engine::runtime::{BuildError, RuntimeError, World};
-use seedwing_policy_engine::value::RuntimeValue;
-use x509_parser::certificate::X509Certificate;
+use seedwing_policy_engine::value::{Object, RuntimeValue};
+
+mod explain;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SeedwingError {
@@ -34,7 +36,7 @@ impl SeedwingEnforcer {
     pub async fn new() -> Result<Self, SeedwingError> {
         let policy = seedwing_policy_engine::runtime::sources::Ephemeral::new(
             "<internal>:default.dog",
-            include_str!("../../policies/default.dog"),
+            include_str!("../../../policies/default.dog"),
         );
 
         let mut builder = Builder::new();
@@ -48,21 +50,43 @@ impl SeedwingEnforcer {
 
 #[async_trait(?Send)]
 impl CertificateChainEnforcer for SeedwingEnforcer {
-    async fn enforce_slice<'c>(&self, bundle: &'c [&'c X509Certificate<'c>]) -> anyhow::Result<()> {
+    async fn enforce<'c>(&self, bundle: &'c CertificateBundle<'c>) -> anyhow::Result<()> {
+        let input = SignedBinary { bundle };
+
         let result = self
             .runtime
-            .evaluate("<internal>:default.dog::signed-binary", bundle)
+            .evaluate("<internal>:default.dog::signed-binary", &input)
             .await?;
-        log::debug!("Result: {result:#?}");
+
+        log::debug!("Result: {:#?}", result.rationale());
+        if !result.satisfied() {
+            explain(&result)?;
+        }
 
         if !result.satisfied() {
-            if log::log_enabled!(log::Level::Debug) {
+            if log::log_enabled!(log::Level::Trace) {
                 let value: RuntimeValue = bundle.into();
-                log::debug!("Value: {value:#?}");
+                log::trace!("Value: {value:#?}");
             }
             bail!("policy rejected");
         }
 
         Ok(())
+    }
+}
+
+/// The structure we pass on to seedwing
+#[derive(Debug)]
+pub struct SignedBinary<'c> {
+    bundle: &'c CertificateBundle<'c>,
+}
+
+impl<'a> From<&SignedBinary<'a>> for RuntimeValue {
+    fn from(value: &SignedBinary) -> Self {
+        let mut result = Object::new();
+
+        result.set("certificate-bundle", &*value.bundle);
+
+        result.into()
     }
 }
