@@ -1,33 +1,65 @@
-pattern signed-binary = self-signed || sigstore-signed
+//! trying to work only with the "raw" field, as we might want to ditch all processing in elfsign itself
 
-pattern self-signed = [ certificate ]
+/// A signed binary
+pattern signed-binary = {
+    certificate-bundle: certificate-bundle,
+}
 
-pattern sigstore-signed = [
-    leaf-certificate,
-    intermediate-certificate,
-    root-certificate
-]
+/// The certificate bundle. Allow self-signed or signed by a trust root
+pattern certificate-bundle = self-signed || root-signed
 
-pattern certificate = {
+/// Self-signed, exactly one certificate, where the issuer signed the subject itself.
+pattern self-signed = {
+    raw: [
+        x509::DER(common-certificate)
+    ]
+}
+
+/// Signed by one of the trusted roots (from trusted-root)
+///
+/// **NOTE**: Right now this expects exactly three certificates. The "intermediate" step should actually be 0 or more.
+pattern root-signed = {
+    raw: [
+        leaf,
+        intermediate,
+        root
+    ]
+}
+
+/// Common certificate checks
+pattern common-certificate = {
     version: 2,
 }
 
-pattern leaf-certificate = certificate
-
-pattern intermediate-certificate = certificate
-
-pattern root-certificate = certificate && trusted-root
-
-pattern trusted-root = sigstore-root
-
-pattern sigstore-root = {
-    version: 2,
-    subject-pki: {
-        public-key: base64::Base64Encode("BPtd4VPitvc9AbBLghqO0uTf86WemBqeBoFyVimxgGvmL7jKcHTtx5vcs/Q4g5l3F7Ffr1zmJW7IlFD4fPTnKL5QXe4FYCUemJLmyHT4fYYcTtJeuTUQLmbVOvX0v2CD3Q=="),
-    }
+pattern leaf = x509::DER(left-certificate)
+pattern left-certificate = common-certificate && {
+    // FIXME: add code signing extension check
 }
 
-pattern subject-alternative-name<EMAIL> = {
-    oid: "1.2.3.4.5",
-    email: EMAIL,
+pattern intermediate = x509::DER(intermediate-certificate)
+pattern intermediate-certificate = common-certificate
+
+pattern root = pem::AsCertificate(trusted-root) && x509::DER(root-certificate)
+pattern root-certificate = common-certificate && {
+    extensions: list::Any<{
+      CA: true
+    }>
 }
+
+pattern trusted-root = sigstore-root // || some-other-root
+
+// fulcio root cert
+pattern sigstore-root = "-----BEGIN CERTIFICATE-----
+MIIB9zCCAXygAwIBAgIUALZNAPFdxHPwjeDloDwyYChAO/4wCgYIKoZIzj0EAwMw
+KjEVMBMGA1UEChMMc2lnc3RvcmUuZGV2MREwDwYDVQQDEwhzaWdzdG9yZTAeFw0y
+MTEwMDcxMzU2NTlaFw0zMTEwMDUxMzU2NThaMCoxFTATBgNVBAoTDHNpZ3N0b3Jl
+LmRldjERMA8GA1UEAxMIc2lnc3RvcmUwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAAT7
+XeFT4rb3PQGwS4IajtLk3/OlnpgangaBclYpsYBr5i+4ynB07ceb3LP0OIOZdxex
+X69c5iVuyJRQ+Hz05yi+UF3uBWAlHpiS5sh0+H2GHE7SXrk1EC5m1Tr19L9gg92j
+YzBhMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBRY
+wB5fkUWlZql6zJChkyLQKsXF+jAfBgNVHSMEGDAWgBRYwB5fkUWlZql6zJChkyLQ
+KsXF+jAKBggqhkjOPQQDAwNpADBmAjEAj1nHeXZp+13NWBNa+EDsDP8G1WWg1tCM
+WP/WHPqpaVo0jhsweNFZgSs0eE7wYI4qAjEA2WB9ot98sIkoF3vZYdd3/VtWB5b9
+TNMea7Ix/stJ5TfcLLeABLE4BNJOsQ4vnBHJ
+-----END CERTIFICATE-----
+"
