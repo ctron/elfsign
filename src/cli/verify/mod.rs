@@ -1,3 +1,6 @@
+use crate::verification::enforce::CertificateChainEnforcer;
+use crate::verification::seedwing::SeedwingEnforcer;
+use crate::verification::validator::EnforceCertificateChain;
 use crate::{
     signature::Signature,
     utils::{elf::process_elf, ElfType},
@@ -11,12 +14,6 @@ use object::{elf, read::elf::ElfFile, Endianness};
 use std::ffi::OsString;
 use x509_parser::der_parser::{oid, Oid};
 use x509_parser::prelude::{ParsedExtension, X509Certificate};
-
-mod seedwing;
-
-use crate::verification::enforce::CertificateChainEnforcer;
-use crate::verification::validator::EnforceCertificateChain;
-use seedwing::SeedwingEnforcer;
 
 const OID_SAN: Oid = oid!(2.5.29 .17);
 

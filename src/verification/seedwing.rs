@@ -34,7 +34,7 @@ impl SeedwingEnforcer {
     pub async fn new() -> Result<Self, SeedwingError> {
         let policy = seedwing_policy_engine::runtime::sources::Ephemeral::new(
             "<internal>:default.dog",
-            include_str!("../../../policies/default.dog"),
+            include_str!("../../policies/default.dog"),
         );
 
         let mut builder = Builder::new();
