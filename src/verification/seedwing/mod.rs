@@ -80,7 +80,7 @@ impl<'a> From<&SignedBinary<'a>> for RuntimeValue {
     fn from(value: &SignedBinary) -> Self {
         let mut result = Object::new();
 
-        result.set("certificate-bundle", &*value.bundle);
+        result.set("certificate-bundle", value.bundle);
 
         result.into()
     }

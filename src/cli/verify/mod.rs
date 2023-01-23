@@ -137,7 +137,7 @@ fn parse_x509(signatures: &[Signature]) -> anyhow::Result<Vec<(&Signature, Certi
 }
 
 /// extract signatures from an elf binary
-fn signatures_from_file<'c, Elf: ElfType>(data: &[u8]) -> anyhow::Result<Vec<Signature>> {
+fn signatures_from_file<Elf: ElfType>(data: &[u8]) -> anyhow::Result<Vec<Signature>> {
     let file = ElfFile::parse(data)?;
     let signatures = extract_signatures::<Elf>(file.raw_header(), data)?;
 
@@ -156,7 +156,7 @@ where
 {
     let mut results = Vec::with_capacity(signatures.len());
 
-    for (signature, bundle) in signatures.into_iter() {
+    for (signature, bundle) in signatures {
         let result = match enforcer.enforce(bundle).await {
             Ok(()) => Ok(bundle),
             Err(err) => Err(anyhow!(err)),

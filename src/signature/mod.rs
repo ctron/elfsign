@@ -372,10 +372,10 @@ async fn publish(digest: &[u8], signature: &Signature) -> anyhow::Result<()> {
 -----END {tag}-----
 "#,
         STANDARD
-            .encode(&cert)
+            .encode(cert)
             .as_bytes()
             .chunks(64)
-            .map(|s| String::from_utf8_lossy(s))
+            .map(String::from_utf8_lossy)
             .collect::<Vec<_>>()
             .join("\n")
     );

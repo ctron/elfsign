@@ -32,7 +32,7 @@ use std::ops::{Add, Deref};
 /// signed by the provided certificate.
 ///
 /// **NOTE:**: This function does not verify any certificate or enforces any other rules.
-pub fn verify_signatures<'c, Elf: ElfType>(
+pub fn verify_signatures<Elf: ElfType>(
     file: &ElfFile<Elf::File>,
     signatures: Vec<Signature>,
 ) -> anyhow::Result<Vec<Signature>> {

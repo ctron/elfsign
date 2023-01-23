@@ -56,7 +56,7 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
 }
 
 /// extract signatures from an elf binary
-fn digest_file<'c, Elf: ElfType>(data: &[u8], digest: DigestAlgorithm) -> anyhow::Result<Vec<u8>> {
+fn digest_file<Elf: ElfType>(data: &[u8], digest: DigestAlgorithm) -> anyhow::Result<Vec<u8>> {
     let file = ElfFile::parse(data)?;
     digest.apply::<Elf>(file)
 }

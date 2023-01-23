@@ -31,7 +31,7 @@ impl<'c> TryFrom<&'c [Vec<u8>]> for CertificateBundle<'c> {
         let mut raw = Vec::with_capacity(bundle.len());
         let mut parsed = Vec::with_capacity(bundle.len());
 
-        for cert in bundle.into_iter() {
+        for cert in bundle {
             let cert = cert.as_ref();
             raw.push(cert);
             parsed.push(parse_x509_certificate(cert)?.1);
