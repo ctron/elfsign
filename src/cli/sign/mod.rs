@@ -3,8 +3,9 @@ use std::ffi::OsString;
 
 mod sigstore;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
 pub enum Configuration {
+    #[default]
     EcdsaP256Sha256,
     EcdsaP384Sha384,
 }
@@ -21,18 +22,16 @@ impl From<Configuration> for SignatureNoteType {
 pub struct Options {
     pub input: OsString,
     pub output: OsString,
+    pub configuration: Configuration,
 }
 
 pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
-    // FIXME: allow to override
-    let configuration = Configuration::EcdsaP256Sha256;
-
-    log::info!("Signing configuration: {configuration:?}");
+    log::info!("Signing configuration: {:?}", options.configuration);
 
     sign(
         options.input,
         options.output,
-        sigstore::create_signer(configuration).await?,
+        sigstore::create_signer(options.configuration).await?,
     )
     .await?;
 

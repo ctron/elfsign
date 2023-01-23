@@ -2,18 +2,13 @@ use crate::signature::digest::digest;
 use crate::utils::elf::{process_elf, Kind};
 use crate::utils::ElfType;
 use digest::{Digest, Update};
-use object::read::elf::ElfFile;
-use object::{elf, Endianness};
+use object::{elf, read::elf::ElfFile, Endianness};
 use sha2::{Sha256, Sha384, Sha512};
 use std::ffi::OsString;
 
-#[derive(Clone, Debug)]
-pub struct Options {
-    pub input: OsString,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
 pub enum DigestAlgorithm {
+    #[default]
     Sha256,
     Sha384,
     Sha512,
@@ -37,15 +32,19 @@ impl DigestAlgorithm {
     }
 }
 
-pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
-    // TODO: make configurable
-    let digest = DigestAlgorithm::Sha256;
+#[derive(Clone, Debug)]
+pub struct Options {
+    pub input: OsString,
+    pub algorithm: DigestAlgorithm,
+}
 
+pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
+    let algo = options.algorithm;
     let digest = process_elf(options.input, move |kind, file| {
         Box::pin(async move {
             match kind {
-                Kind::Elf32 => digest_file::<elf::FileHeader32<Endianness>>(file, digest),
-                Kind::Elf64 => digest_file::<elf::FileHeader64<Endianness>>(file, digest),
+                Kind::Elf32 => digest_file::<elf::FileHeader32<Endianness>>(file, algo),
+                Kind::Elf64 => digest_file::<elf::FileHeader64<Endianness>>(file, algo),
             }
         })
     })

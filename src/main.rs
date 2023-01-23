@@ -1,3 +1,4 @@
+use crate::cli::digest::DigestAlgorithm;
 use crate::cli::{digest, sign, verify};
 use clap::{Parser, Subcommand};
 use log::LevelFilter;
@@ -27,20 +28,30 @@ struct Cli {
 enum Command {
     /// Sign an elf binary
     Sign {
+        /// The ELF binary to sign
         #[arg()]
         input: OsString,
+        /// The target file
         #[arg()]
         output: OsString,
+        #[arg(default_value_t, long, value_enum)]
+        configuration: sign::Configuration,
     },
     /// Verify signatures of an elf binary
     Verify {
+        /// The file to verify
         #[arg()]
         input: OsString,
     },
     /// Create a digest for an elf binary
     Digest {
+        /// The file to create the digest for
         #[arg()]
         input: OsString,
+
+        /// The digest algorithm to use
+        #[arg(default_value_t, long, value_enum)]
+        algorithm: DigestAlgorithm,
     },
 }
 
@@ -74,9 +85,22 @@ async fn main() -> anyhow::Result<()> {
     setup_logger(&cli);
 
     match cli.command {
-        Command::Sign { input, output } => sign::run(sign::Options { input, output }).await?,
+        Command::Sign {
+            input,
+            output,
+            configuration,
+        } => {
+            sign::run(sign::Options {
+                input,
+                output,
+                configuration,
+            })
+            .await?
+        }
         Command::Verify { input } => verify::run(verify::Options { input }).await?,
-        Command::Digest { input } => digest::run(digest::Options { input }).await?,
+        Command::Digest { input, algorithm } => {
+            digest::run(digest::Options { input, algorithm }).await?
+        }
     }
 
     Ok(())
