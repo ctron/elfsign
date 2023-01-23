@@ -1,4 +1,4 @@
-use crate::cli::{sign, verify};
+use crate::cli::{digest, sign, verify};
 use clap::{Parser, Subcommand};
 use log::LevelFilter;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
@@ -25,13 +25,20 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    /// Sign an elf binary
     Sign {
         #[arg()]
         input: OsString,
         #[arg()]
         output: OsString,
     },
+    /// Verify signatures of an elf binary
     Verify {
+        #[arg()]
+        input: OsString,
+    },
+    /// Create a digest for an elf binary
+    Digest {
         #[arg()]
         input: OsString,
     },
@@ -69,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Sign { input, output } => sign::run(sign::Options { input, output }).await?,
         Command::Verify { input } => verify::run(verify::Options { input }).await?,
+        Command::Digest { input } => digest::run(digest::Options { input }).await?,
     }
 
     Ok(())
