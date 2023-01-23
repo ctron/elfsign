@@ -4,14 +4,15 @@ use crate::signature::{
     SignerConfiguration, VerifyingKeyEncoding,
 };
 use anyhow::bail;
-use digest::Digest;
+use async_trait::async_trait;
+use digest::{const_oid::AssociatedOid, Digest};
 use ecdsa::elliptic_curve::{
     generic_array::ArrayLength,
     ops::{Invert, Reduce},
-    sec1,
-    sec1::{FromEncodedPoint, ToEncodedPoint},
+    pkcs8::EncodePublicKey,
+    sec1::{self, FromEncodedPoint, ToEncodedPoint},
     subtle::CtOption,
-    AffinePoint, FieldSize, ProjectiveArithmetic, Scalar,
+    AffinePoint, FieldSize, PointCompression, ProjectiveArithmetic, Scalar,
 };
 use ecdsa::{hazmat::SignPrimitive, PrimeCurve, SignatureSize, SigningKey};
 use p256::{pkcs8::DecodePrivateKey, NistP256};
@@ -53,7 +54,7 @@ impl<D: Digest> From<((SigStoreSigner, FulcioCert), SignatureNoteType)>
 
 impl<C> VerifyingKeyEncoding for SigningKey<C>
 where
-    C: PrimeCurve + ProjectiveArithmetic,
+    C: PrimeCurve + AssociatedOid + ProjectiveArithmetic + PointCompression,
     Scalar<C>: Invert<Output = CtOption<Scalar<C>>> + Reduce<C::UInt> + SignPrimitive<C>,
     SignatureSize<C>: ArrayLength<u8>,
     AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
@@ -66,13 +67,18 @@ where
             .as_bytes()
             .to_vec())
     }
+
+    fn to_public_key_der(&self) -> anyhow::Result<Vec<u8>> {
+        Ok(self.verifying_key().to_public_key_der()?.to_vec())
+    }
 }
 
 pub struct BoxedSignerConfiguration(Box<dyn SignerConfiguration>);
 
+#[async_trait(?Send)]
 impl SignerConfiguration for BoxedSignerConfiguration {
-    fn sign<'f>(&self, f: DigestFeeder) -> anyhow::Result<Signature> {
-        self.0.sign(f)
+    async fn sign<'f>(&self, f: DigestFeeder<'f>) -> anyhow::Result<Signature> {
+        self.0.sign(f).await
     }
 }
 

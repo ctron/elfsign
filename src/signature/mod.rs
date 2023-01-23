@@ -3,13 +3,32 @@ use crate::utils::{
     ElfType,
 };
 use ::digest::{Digest, Update};
-use anyhow::Context;
-use base64::display::Base64Display;
+use anyhow::{bail, Context};
+use async_trait::async_trait;
+use base64::{display::Base64Display, engine::general_purpose::STANDARD, Engine};
+use ecdsa::{
+    der,
+    elliptic_curve::{generic_array::ArrayLength, FieldSize},
+    PrimeCurve, SignatureSize,
+};
 use object::Endian;
 use signature::{DigestSigner, SignatureEncoding};
-use std::fmt::{Debug, Display, Formatter};
-use std::io::Cursor;
-use std::{borrow::Cow, marker::PhantomData};
+use sigstore::rekor::{
+    self,
+    apis::configuration::Configuration,
+    models::{
+        hashedrekord,
+        hashedrekord::{AlgorithmKind, Data, Hash, PublicKey, Spec},
+        ProposedEntry,
+    },
+};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display, Formatter},
+    io::Cursor,
+    marker::PhantomData,
+    ops::Add,
+};
 
 pub mod digest;
 mod sign;
@@ -64,7 +83,9 @@ impl TryFrom<u32> for SignatureNoteType {
 pub struct Signature {
     // FIXME: using the note type here is a bit wacky, as it actually is the type of the note entry
     pub r#type: SignatureNoteType,
+    /// DER/ASN.1 encoded public key
     pub public_key: Vec<u8>,
+    /// DER/ASN.1 encoded signature
     pub signature: Vec<u8>,
 
     /// DER encoded certificate bundle, root last.
@@ -223,12 +244,37 @@ impl Signatures {
 
 pub type DigestFeeder<'f> = Box<dyn FnOnce(&mut dyn Update) -> anyhow::Result<()> + 'f>;
 
+/// A configuration, ready to sign content.
+#[async_trait(?Send)]
 pub trait SignerConfiguration {
-    fn sign(&self, f: DigestFeeder) -> anyhow::Result<Signature>;
+    async fn sign<'f>(&self, f: DigestFeeder<'f>) -> anyhow::Result<Signature>;
 }
 
 pub trait VerifyingKeyEncoding {
     fn to_public_key_vec(&self) -> anyhow::Result<Vec<u8>>;
+    fn to_public_key_der(&self) -> anyhow::Result<Vec<u8>>;
+}
+
+/// A trait for encoding signatures in DER/ASN.1 format
+pub trait DerSignatureEncoding: Sized {
+    fn to_der(&self) -> Vec<u8>;
+    fn try_from_der(data: &[u8]) -> anyhow::Result<Self>;
+}
+
+impl<C> DerSignatureEncoding for ecdsa::Signature<C>
+where
+    C: PrimeCurve,
+    SignatureSize<C>: ArrayLength<u8>,
+    der::MaxSize<C>: ArrayLength<u8>,
+    <FieldSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
+{
+    fn to_der(&self) -> Vec<u8> {
+        ecdsa::Signature::to_der(self).to_vec()
+    }
+
+    fn try_from_der(data: &[u8]) -> anyhow::Result<Self> {
+        Ok(ecdsa::Signature::from_der(data)?)
+    }
 }
 
 pub trait CertificateBundleEncoding {
@@ -270,26 +316,101 @@ where
     }
 }
 
+#[async_trait(?Send)]
 impl<D, S, DS, CBE> SignerConfiguration for DigestSignerWrapper<D, S, DS, CBE>
 where
     D: Digest + Update + Clone,
     DS: DigestSigner<D, S> + VerifyingKeyEncoding,
-    S: SignatureEncoding,
+    S: DerSignatureEncoding,
     CBE: CertificateBundleEncoding,
 {
-    fn sign<'f>(&self, f: DigestFeeder) -> anyhow::Result<Signature> {
+    async fn sign<'f>(&self, f: DigestFeeder<'f>) -> anyhow::Result<Signature> {
+        // digest file
         let mut digest = D::new();
         f(&mut digest)?;
 
-        let signature = self.signer.try_sign_digest(digest)?.to_vec();
-        let public_key = self.signer.to_public_key_vec()?;
+        let publish_digest = digest.clone().finalize().to_vec();
+
+        // sign
+        let signature = self.signer.try_sign_digest(digest)?.to_der();
+        let public_key = self.signer.to_public_key_der()?;
         let certificate_bundle = self.certificate_bundle.to_certificate_bundle()?;
 
-        Ok(Signature {
+        // signature entry
+        let signature = Signature {
             r#type: self.r#type,
             signature,
             public_key,
             certificate_bundle,
-        })
+        };
+
+        // publish to rekor
+        publish(&publish_digest, &signature).await?;
+
+        // done
+        Ok(signature)
     }
+}
+
+/// publish the digest
+async fn publish(digest: &[u8], signature: &Signature) -> anyhow::Result<()> {
+    let cfg = Configuration::default();
+
+    let cert = match signature.certificate_bundle.first() {
+        Some(cert) => cert,
+        None => {
+            bail!("No certificate provided");
+        }
+    };
+
+    let tag = "CERTIFICATE";
+
+    // yes, the certificate goes in to the "public key" field
+    let public_key = format!(
+        r#"-----BEGIN {tag}-----
+{}
+-----END {tag}-----
+"#,
+        STANDARD
+            .encode(&cert)
+            .as_bytes()
+            .chunks(64)
+            .map(|s| String::from_utf8_lossy(s))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    // and yes, it is double-base64 encoded
+    let public_key = STANDARD.encode(&public_key);
+
+    let entry = ProposedEntry::Hashedrekord {
+        api_version: "0.0.1".to_string(),
+        spec: Spec {
+            signature: hashedrekord::Signature {
+                content: STANDARD.encode(&signature.signature),
+                public_key: PublicKey::new(public_key),
+            },
+            data: Data {
+                hash: Hash::new(AlgorithmKind::sha256, base16::encode_lower(digest)),
+            },
+        },
+    };
+
+    log::info!("Request: {}", serde_json::to_string_pretty(&entry)?);
+
+    let log = match rekor::apis::entries_api::create_log_entry(&cfg, entry).await {
+        Ok(log) => log,
+        Err(err) => {
+            match &err {
+                rekor::apis::Error::ResponseError(response) => {
+                    log::warn!("Status: {}", response.status);
+                    log::warn!("Response: {}", response.content);
+                }
+                _ => {}
+            }
+            bail!(err);
+        }
+    };
+    log::info!("Rekor log entry: {log:#?}");
+
+    Ok(())
 }

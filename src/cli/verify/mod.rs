@@ -1,19 +1,25 @@
-use crate::verification::enforce::{CertificateBundle, CertificateChainEnforcer};
-use crate::verification::seedwing::SeedwingEnforcer;
-use crate::verification::validator::EnforceCertificateChain;
 use crate::{
     signature::Signature,
-    utils::{elf::process_elf, ElfType},
+    utils::{
+        elf::{process_elf, Kind},
+        ElfType,
+    },
     verification::{
         elf::{extract_signatures, verify_signatures},
-        enforce::{CertificateEnforcer, StandardEnforcer},
+        enforce::{
+            CertificateBundle, CertificateChainEnforcer, CertificateEnforcer, StandardEnforcer,
+        },
+        seedwing::SeedwingEnforcer,
+        validator::EnforceCertificateChain,
     },
 };
 use anyhow::{anyhow, bail};
 use object::{elf, read::elf::ElfFile, Endianness};
 use std::ffi::OsString;
-use x509_parser::der_parser::{oid, Oid};
-use x509_parser::prelude::ParsedExtension;
+use x509_parser::{
+    der_parser::{oid, Oid},
+    prelude::ParsedExtension,
+};
 
 const OID_SAN: Oid = oid!(2.5.29 .17);
 
@@ -25,11 +31,15 @@ pub struct Options {
 pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
     // retrieve signatures from the elf file, and ensure the file signature matches the
     // embedded public key and the evaluated digest.
-    let signatures = process_elf(
-        options.input,
-        signatures_from_file::<elf::FileHeader32<Endianness>>,
-        signatures_from_file::<elf::FileHeader64<Endianness>>,
-    )?;
+    let signatures = process_elf(options.input, |kind, file| {
+        Box::pin(async move {
+            match kind {
+                Kind::Elf32 => signatures_from_file::<elf::FileHeader32<Endianness>>(file),
+                Kind::Elf64 => signatures_from_file::<elf::FileHeader64<Endianness>>(file),
+            }
+        })
+    })
+    .await?;
 
     // These signatures are ok, the digest of the file was signed with the public key. But,
     // we still don't know anything about the certificates beyond the fact that the public key

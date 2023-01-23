@@ -3,7 +3,10 @@
 use super::{create_signature, sign_raw, Processor};
 use crate::{
     signature::{SignerConfiguration, SIGNATURE_V1_SECTION},
-    utils::{elf::process_elf, ElfType},
+    utils::{
+        elf::{process_elf, Kind},
+        ElfType,
+    },
 };
 use anyhow::bail;
 use object::{
@@ -26,19 +29,25 @@ where
 {
     let out_file_path = out_file_path.as_ref();
 
-    let out_data = process_elf(
-        in_file_path,
-        |data| {
-            created_signed_file::<elf::FileHeader32<Endianness>>(data, |file| {
-                create_signature(&signer, &file)
-            })
-        },
-        |data| {
-            created_signed_file::<elf::FileHeader64<Endianness>>(data, |file| {
-                create_signature(&signer, &file)
-            })
-        },
-    )?;
+    let out_data = process_elf(in_file_path, |kind, data| {
+        Box::pin(async move {
+            match kind {
+                Kind::Elf32 => {
+                    created_signed_file::<elf::FileHeader32<Endianness>>(data, |file| async move {
+                        create_signature(&signer, &file).await
+                    })
+                    .await
+                }
+                Kind::Elf64 => {
+                    created_signed_file::<elf::FileHeader64<Endianness>>(data, |file| async move {
+                        create_signature(&signer, &file).await
+                    })
+                    .await
+                }
+            }
+        })
+    })
+    .await?;
 
     if let Err(err) = fs::write(out_file_path, out_data) {
         bail!(
@@ -52,11 +61,11 @@ where
 }
 
 /// takes the data of an elf file and creates a signed version
-fn created_signed_file<'data, Elf: ElfType<Endian = Endianness>>(
+async fn created_signed_file<'data, Elf: ElfType<Endian = Endianness>>(
     in_data: &'data [u8],
     processor: impl Processor<'data, Elf>,
 ) -> anyhow::Result<Vec<u8>> {
-    let sig_data = sign_raw(in_data, processor)?;
+    let sig_data = sign_raw(in_data, processor).await?;
 
     // copy all to output buffer
     let mut out = in_data.to_vec();

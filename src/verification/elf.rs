@@ -1,3 +1,4 @@
+use crate::signature::DerSignatureEncoding;
 use crate::{
     signature::{
         digest::digest, Signature, SignatureNoteType, ELF_NOTE_SIGNATURE_V1_NAMESPACE,
@@ -8,11 +9,13 @@ use crate::{
 use anyhow::{anyhow, bail};
 use digest::{Digest, FixedOutput, Update};
 use ecdsa::{
+    der,
     elliptic_curve::{
         generic_array::ArrayLength,
         ops::Reduce,
+        pkcs8::{AssociatedOid, DecodePublicKey},
         sec1::{self, FromEncodedPoint, ToEncodedPoint},
-        AffinePoint, FieldSize, ProjectiveArithmetic, Scalar,
+        AffinePoint, FieldSize, PointCompression, ProjectiveArithmetic, Scalar,
     },
     hazmat::VerifyPrimitive,
     PrimeCurve, SignatureSize, VerifyingKey,
@@ -22,8 +25,8 @@ use object::read::elf::{ElfFile, FileHeader, SectionHeader};
 use p256::NistP256;
 use p384::NistP384;
 use sha2::{Sha256, Sha384};
-use signature::{DigestVerifier, SignatureEncoding};
-use std::ops::Deref;
+use signature::DigestVerifier;
+use std::ops::{Add, Deref};
 
 /// Filter out signatures which don't match the actual digest, or where the signature was not
 /// signed by the provided certificate.
@@ -58,17 +61,20 @@ fn verify_ecsa_entry<Elf, D, C>(
 where
     Elf: ElfType,
     D: Digest + Update + FixedOutput<OutputSize = FieldSize<C>>,
-    C: PrimeCurve + ProjectiveArithmetic,
+    C: PrimeCurve + AssociatedOid + ProjectiveArithmetic + PointCompression,
 
     SignatureSize<C>: ArrayLength<u8>,
     AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
     FieldSize<C>: sec1::ModulusSize,
     Scalar<C>: Reduce<C::UInt>,
+
+    der::MaxSize<C>: ArrayLength<u8>,
+    <FieldSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
 {
     let mut d = D::new();
     digest(&mut d, file)?;
 
-    let verifier = VerifyingKey::<C>::from_sec1_bytes(&signature.public_key)?;
+    let verifier = VerifyingKey::<C>::from_public_key_der(&signature.public_key)?;
     match verify_signature::<_, ecdsa::Signature<C>, _>(&verifier, d, &signature) {
         Ok(()) => {
             result.push(signature);
@@ -94,12 +100,12 @@ fn verify_signature<V, S, D>(
 ) -> anyhow::Result<()>
 where
     V: DigestVerifier<D, S>,
-    S: SignatureEncoding,
+    S: DerSignatureEncoding,
     D: Digest,
 {
     // parse the signature
 
-    let signature = match S::try_from(&signature_entry.signature) {
+    let signature = match S::try_from_der(&signature_entry.signature) {
         Ok(signature) => signature,
         Err(_) => {
             bail!("failed to parse signature");
@@ -130,7 +136,7 @@ where
                     base16::encode_lower(&cert.subject_pki.subject_public_key)
                 );
             }
-            if signature_entry.public_key.deref() != cert.subject_pki.subject_public_key.as_ref() {
+            if signature_entry.public_key.deref() != cert.subject_pki.raw {
                 bail!(
                     "public key mismatch - entry: {}, certificate: {}",
                     base16::encode_lower(&signature_entry.public_key),

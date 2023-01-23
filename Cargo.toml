@@ -18,7 +18,7 @@ base16 = "0.2.1"
 base64 = "0.21.0"
 clap = { version = "4", features = ["derive", "cargo"] }
 digest = "0.10.6"
-ecdsa = "0.15.0"
+ecdsa = { version = "0.15.0", features = ["der"] }
 log = "0.4"
 object = { version = "0.30", features = ["all"] }
 p256 = "0.12.0"
@@ -32,8 +32,12 @@ tokio = { version = "1", features = ["full"] }
 url = "2"
 x509-parser = "0.14"
 termcolor = "1"
+serde_json = "1"
 
 seedwing-policy-engine = { version = "0.1.0", git = "https://github.com/seedwing-io/seedwing-policy", rev = "54909d80d8fde834beb3ccc107dc45152e235f35" }
 
 [patch."https://github.com/seedwing-io/seedwing-policy"]
 #seedwing-policy-engine = { path = "../seedwing-policy/seedwing-policy-engine" }
+
+[patch.crates-io]
+#sigstore = { path = "/home/jreimann/git/sigstore-rs" }
