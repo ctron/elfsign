@@ -1193,6 +1193,7 @@ checksum = "1885e79c1fc4b10f0e172c475f458b7f7b93061064d98c3293e98c5ba0c8b399"
 dependencies = [
  "autocfg",
  "hashbrown 0.12.3",
+ "serde",
 ]
 
 [[package]]
@@ -2369,12 +2370,15 @@ dependencies = [
 [[package]]
 name = "seedwing-policy-engine"
 version = "0.1.0"
+source = "git+https://github.com/seedwing-io/seedwing-policy?rev=54909d80d8fde834beb3ccc107dc45152e235f35#54909d80d8fde834beb3ccc107dc45152e235f35"
 dependencies = [
  "ariadne",
  "base64 0.20.0",
  "chumsky",
  "futures-util",
+ "indexmap",
  "log",
+ "regex",
  "serde",
  "serde_json",
  "sigstore",

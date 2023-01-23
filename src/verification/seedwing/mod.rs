@@ -58,15 +58,10 @@ impl CertificateChainEnforcer for SeedwingEnforcer {
             .evaluate("<internal>:default.dog::signed-binary", &input)
             .await?;
 
-        log::debug!("Result: {:#?}", result.rationale());
+        log::trace!("trace: {:#?}", result.rationale());
         if !result.satisfied() {
-            explain(&result)?;
-        }
-
-        if !result.satisfied() {
-            if log::log_enabled!(log::Level::Trace) {
-                let value: RuntimeValue = bundle.into();
-                log::trace!("Value: {value:#?}");
+            if log::log_enabled!(log::Level::Info) {
+                explain(&result)?;
             }
             bail!("policy rejected");
         }

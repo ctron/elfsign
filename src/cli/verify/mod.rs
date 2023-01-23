@@ -59,7 +59,7 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
     // * form a chain (subject signed by issuer)
     // * plus all checks from the provided enforcers
     let certificates = verify_certificates(&signatures, &chain_enforcers).await;
-    log::debug!("Validation result: {certificates:#?}");
+    log::trace!("Validation result: {certificates:#?}");
     if log::log_enabled!(log::Level::Info) {
         for (signature, result) in &certificates {
             match result {
@@ -104,7 +104,7 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
         .next()
         .is_some();
 
-    // FIXME: think about a check where all stores signatures must be valid
+    // FIXME: think about a check where all stored signatures must be valid
 
     if !has_some {
         bail!("No valid signatures found");

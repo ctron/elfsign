@@ -33,7 +33,7 @@ url = "2"
 x509-parser = "0.14"
 termcolor = "1"
 
-seedwing-policy-engine = { version = "0.1.0", git = "https://github.com/seedwing-io/seedwing-policy", rev = "5117d83556bf205fac919bd48128799c186d2898" }
+seedwing-policy-engine = { version = "0.1.0", git = "https://github.com/seedwing-io/seedwing-policy", rev = "54909d80d8fde834beb3ccc107dc45152e235f35" }
 
 [patch."https://github.com/seedwing-io/seedwing-policy"]
-seedwing-policy-engine = { path = "../seedwing-policy/seedwing-policy-engine" }
+#seedwing-policy-engine = { path = "../seedwing-policy/seedwing-policy-engine" }

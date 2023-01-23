@@ -17,7 +17,7 @@ pub fn explain(result: &EvaluationResult) -> std::io::Result<()> {
 
 fn explain_inner(
     w: &mut dyn WriteColor,
-    mut indent: usize,
+    indent: usize,
     result: &EvaluationResult,
 ) -> std::io::Result<()> {
     const OFFSET: usize = 2;
@@ -50,7 +50,7 @@ fn explain_inner(
     )?;
 
     writeln!(w, "{:indent$}Rationale:", "")?;
-    indent += OFFSET;
+    let indent = indent + OFFSET;
 
     if !result.satisfied() {
         w.reset()?;
@@ -80,6 +80,7 @@ fn explain_inner(
             }
         }
         Rationale::List(terms) => {
+            writeln!(w, "{:indent$}List:", "")?;
             for r in terms {
                 explain_inner(w, indent + OFFSET, r)?;
             }

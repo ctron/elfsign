@@ -16,14 +16,14 @@ pattern self-signed = {
 }
 
 /// Signed by one of the trusted roots (from trusted-root)
-///
-/// **NOTE**: Right now this expects exactly three certificates. The "intermediate" step should actually be 0 or more.
 pattern root-signed = {
-    raw: [
-        leaf,
-        intermediate,
-        root
-    ]
+    raw: list::Head({
+        head: [leaf],
+        main: list::Tail({
+          main: list::All<intermediate>,
+          tail: [root],
+        }),
+    })
 }
 
 /// Common certificate checks
@@ -31,13 +31,28 @@ pattern common-certificate = {
     version: 2,
 }
 
-pattern leaf = x509::DER(left-certificate)
-pattern left-certificate = common-certificate && {
-    // FIXME: add code signing extension check
+pattern leaf = x509::DER(leaf-certificate)
+pattern leaf-certificate = common-certificate && {
+    extensions:
+        list::Any<{keyUsage: list::Any<"Digital Signature">}>
+        &&
+        list::Any<{
+            extendedKeyUsage: {
+                any: true,
+            } || {
+                codeSigning: true,
+            }
+        }>
+        &&
+        list::None<{CA: true}>
 }
 
 pattern intermediate = x509::DER(intermediate-certificate)
-pattern intermediate-certificate = common-certificate
+pattern intermediate-certificate = common-certificate && {
+    extensions: list::Any<{
+      CA: true
+    }>
+}
 
 pattern root = pem::AsCertificate(trusted-root) && x509::DER(root-certificate)
 pattern root-certificate = common-certificate && {
