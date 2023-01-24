@@ -1,5 +1,6 @@
 use std::io::{self, Cursor, Read};
 
+/// Helper to read data from a source
 pub trait Reader {
     fn read_slice_into(&mut self, buffer: &mut [u8]) -> Result<(), io::Error>;
 
@@ -23,6 +24,7 @@ pub trait Reader {
     }
 }
 
+/// Read data from a curser, like a buffer.
 impl<T> Reader for Cursor<T>
 where
     T: AsRef<[u8]>,
