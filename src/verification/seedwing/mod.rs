@@ -44,7 +44,7 @@ impl SeedwingEnforcer {
                     let mut cache = SourceCache::new();
                     Self::sources().for_each(|(location, s)| cache.add(location, s.into()));
                     // FIXME: use reference once we moved back to HEAD
-                    ErrorPrinter::new(&cache).display(err.clone());
+                    ErrorPrinter::new(&cache).display(&err);
                 }
                 return Err(SeedwingError::Build(err));
             }
