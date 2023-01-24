@@ -5,10 +5,13 @@ use object::{bytes_of_slice, Endian, Pod, U32};
 use std::borrow::Cow;
 
 /// An entry on a notes section
-pub struct Note<'n> {
+pub struct Note<'n, T>
+where
+    T: Into<u32>,
+{
     pub namespace: &'n str,
     pub descriptor: Cow<'n, [u8]>,
-    pub r#type: u32,
+    pub r#type: T,
 }
 
 pub trait NoteHeader {
@@ -90,7 +93,10 @@ impl<'w, W: WritableBuffer, E: ElfType> NoteWriter<'w, W, E> {
     }
 
     /// Write a slice of notes.
-    pub fn write_notes(&mut self, notes: &[Note]) {
+    pub fn write_notes<T>(&mut self, notes: &[Note<T>])
+    where
+        T: Clone + Into<u32>,
+    {
         // headers first
 
         let num = notes.len();
@@ -109,7 +115,7 @@ impl<'w, W: WritableBuffer, E: ElfType> NoteWriter<'w, W, E> {
                 self.endian,
                 namespace_len as u32,
                 descriptor_len as u32,
-                note.r#type,
+                note.r#type.clone().into(),
             );
         }
 

@@ -63,7 +63,12 @@ fn explain_inner(
         Rationale::Nothing => {
             writeln!(w, "{:indent$}nothing", "")?;
         }
-        Rationale::Chain(terms) => {
+        Rationale::Meet(terms) => {
+            for r in terms {
+                explain_inner(w, indent + OFFSET, r)?;
+            }
+        }
+        Rationale::Join(terms) => {
             for r in terms {
                 explain_inner(w, indent + OFFSET, r)?;
             }

@@ -1,8 +1,11 @@
 use crate::signature::SIGNATURE_V1_SECTION;
 use anyhow::bail;
 use digest::Update;
-use object::read::elf::{ElfFile, ElfSection, FileHeader};
-use object::{bytes_of, Object, ObjectSection, U64};
+use object::{
+    bytes_of,
+    read::elf::{ElfFile, ElfSection, FileHeader},
+    Object, ObjectSection, U64,
+};
 
 /// Create a digest of an elf file.
 ///

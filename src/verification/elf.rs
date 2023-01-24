@@ -1,11 +1,12 @@
-use crate::signature::DerSignatureEncoding;
 use crate::{
+    data::{Configuration, Signature},
     signature::{
-        digest::digest, Signature, SignatureNoteType, ELF_NOTE_SIGNATURE_V1_NAMESPACE,
+        digest::digest, DerSignatureEncoding, SignatureNoteType, ELF_NOTE_SIGNATURE_V1_NAMESPACE,
         SIGNATURE_V1_SECTION,
     },
     utils::ElfType,
 };
+use ::der::Decode;
 use anyhow::{anyhow, bail};
 use digest::{Digest, FixedOutput, Update};
 use ecdsa::{
@@ -26,7 +27,7 @@ use p256::NistP256;
 use p384::NistP384;
 use sha2::{Sha256, Sha384};
 use signature::DigestVerifier;
-use std::ops::{Add, Deref};
+use std::ops::Add;
 
 /// Filter out signatures which don't match the actual digest, or where the signature was not
 /// signed by the provided certificate.
@@ -40,10 +41,10 @@ pub fn verify_signatures<Elf: ElfType>(
 
     for (i, signature) in signatures.into_iter().enumerate() {
         match signature.r#type {
-            SignatureNoteType::SignatureEcdsaP256Sha256 => {
+            Configuration::EcdsaP256Sha256 => {
                 verify_ecsa_entry::<Elf, Sha256, NistP256>(i, file, signature, &mut result)?;
             }
-            SignatureNoteType::SignatureEcdsaP384Sha384 => {
+            Configuration::EcdsaP384Sha384 => {
                 verify_ecsa_entry::<Elf, Sha384, NistP384>(i, file, signature, &mut result)?;
             }
         }
@@ -74,7 +75,7 @@ where
     let mut d = D::new();
     digest(&mut d, file)?;
 
-    let verifier = VerifyingKey::<C>::from_public_key_der(&signature.public_key)?;
+    let verifier = VerifyingKey::<C>::from_public_key_der(signature.public_key.as_bytes())?;
     match verify_signature::<_, ecdsa::Signature<C>, _>(&verifier, d, &signature) {
         Ok(()) => {
             result.push(signature);
@@ -105,7 +106,7 @@ where
 {
     // parse the signature
 
-    let signature = match S::try_from_der(&signature_entry.signature) {
+    let signature = match S::try_from_der(signature_entry.signature.as_bytes()) {
         Ok(signature) => signature,
         Err(_) => {
             bail!("failed to parse signature");
@@ -128,7 +129,7 @@ where
 
     match signature_entry.certificate_bundle.first() {
         Some(cert) => {
-            let (_, cert) = x509_parser::parse_x509_certificate(cert)?;
+            let (_, cert) = x509_parser::parse_x509_certificate(cert.as_bytes())?;
             if log_enabled!(log::Level::Debug) {
                 log::debug!(
                     "public keys - entry: {}, certificate: {}",
@@ -136,7 +137,7 @@ where
                     base16::encode_lower(&cert.subject_pki.subject_public_key)
                 );
             }
-            if signature_entry.public_key.deref() != cert.subject_pki.raw {
+            if signature_entry.public_key.as_bytes() != cert.subject_pki.raw {
                 bail!(
                     "public key mismatch - entry: {}, certificate: {}",
                     base16::encode_lower(&signature_entry.public_key),
@@ -193,15 +194,15 @@ fn parse_signature_section<Elf: ElfType>(
             continue;
         }
 
-        let r#type = match SignatureNoteType::try_from(note.n_type(endian)) {
-            Ok(t) => t,
+        match SignatureNoteType::try_from(note.n_type(endian)) {
+            Ok(SignatureNoteType::Asn1Signature) => {
+                result.push(Signature::from_der(note.desc())?);
+            }
             Err(()) => {
                 log::warn!("Unknown signature type: {}", note.n_type(endian));
                 continue;
             }
-        };
-
-        result.push(Signature::parse(endian, r#type, note.desc())?);
+        }
     }
 
     Ok(result)

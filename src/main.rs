@@ -6,6 +6,7 @@ use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use std::ffi::OsString;
 
 mod cli;
+pub(crate) mod data;
 pub(crate) mod signature;
 mod utils;
 pub(crate) mod verification;
@@ -35,7 +36,7 @@ enum Command {
         #[arg()]
         output: OsString,
         #[arg(default_value_t, long, value_enum)]
-        configuration: sign::Configuration,
+        configuration: data::Configuration,
     },
     /// Verify signatures of an elf binary
     Verify {

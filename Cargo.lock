@@ -602,6 +602,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1a467a65c5e759bce6e65eaf91cc29f466cdc57cb65777bd646872a8a1fd4de"
 dependencies = [
  "const-oid 0.9.1",
+ "der_derive",
  "pem-rfc7468 0.6.0",
  "zeroize",
 ]
@@ -618,6 +619,18 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "rusticata-macros",
+]
+
+[[package]]
+name = "der_derive"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ef71ddb5b3a1f53dee24817c8f70dfa1cb29e804c18d88c228d4bc9c86ee3b9"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -727,13 +740,17 @@ dependencies = [
  "base16",
  "base64 0.21.0",
  "clap",
+ "der 0.6.1",
  "digest 0.10.6",
  "ecdsa 0.15.0",
+ "env_logger",
  "log",
  "object",
  "p256 0.12.0",
  "p384 0.12.0",
+ "pkcs1 0.4.1",
  "seedwing-policy-engine",
+ "serde",
  "serde_json",
  "sha2 0.10.6",
  "signature 2.0.0",
@@ -775,6 +792,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9852635589dc9f9ea1b6fe9f05b50ef208c85c834a562f0c6abb1c475736ec2b"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85cdab6a89accf66733ad5a1693a4dcced6aeff64602b634530dd73c1f3ee9f0"
+dependencies = [
+ "humantime",
+ "is-terminal",
+ "log",
+ "regex",
+ "termcolor",
 ]
 
 [[package]]
@@ -1108,6 +1138,12 @@ name = "httpdate"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
+
+[[package]]
+name = "humantime"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyper"
@@ -2371,7 +2407,7 @@ dependencies = [
 [[package]]
 name = "seedwing-policy-engine"
 version = "0.1.0"
-source = "git+https://github.com/seedwing-io/seedwing-policy?rev=389e10505abce79296652226ec5bf726f599ca8c#389e10505abce79296652226ec5bf726f599ca8c"
+source = "git+https://github.com/seedwing-io/seedwing-policy?rev=54909d80d8fde834beb3ccc107dc45152e235f35#54909d80d8fde834beb3ccc107dc45152e235f35"
 dependencies = [
  "ariadne",
  "base64 0.20.0",

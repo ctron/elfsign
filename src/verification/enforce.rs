@@ -1,5 +1,6 @@
 use anyhow::bail;
 use async_trait::async_trait;
+use der::asn1::OctetString;
 use seedwing_policy_engine::value::{Object, RuntimeValue};
 use std::ops::Deref;
 use x509_parser::prelude::*;
@@ -28,6 +29,23 @@ impl<'c> TryFrom<&'c [Vec<u8>]> for CertificateBundle<'c> {
     type Error = anyhow::Error;
 
     fn try_from(bundle: &'c [Vec<u8>]) -> Result<Self, Self::Error> {
+        let mut raw = Vec::with_capacity(bundle.len());
+        let mut parsed = Vec::with_capacity(bundle.len());
+
+        for cert in bundle {
+            let cert = cert.as_ref();
+            raw.push(cert);
+            parsed.push(parse_x509_certificate(cert)?.1);
+        }
+
+        Ok(Self { raw, parsed })
+    }
+}
+
+impl<'c> TryFrom<&'c [OctetString]> for CertificateBundle<'c> {
+    type Error = anyhow::Error;
+
+    fn try_from(bundle: &'c [OctetString]) -> Result<Self, Self::Error> {
         let mut raw = Vec::with_capacity(bundle.len());
         let mut parsed = Vec::with_capacity(bundle.len());
 

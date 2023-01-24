@@ -1,5 +1,6 @@
 use crate::{
-    signature::{digest::digest, Signatures, SignerConfiguration},
+    data::Signatures,
+    signature::{digest::digest, SignerConfiguration},
     utils::ElfType,
 };
 use async_trait::async_trait;
@@ -62,5 +63,5 @@ async fn sign_raw<'data, Elf: ElfType>(
     let elf = ElfFile::<'data, Elf::File>::parse(in_data)?;
     let endian = elf.endian();
     let signatures = processor.run(elf).await?;
-    Ok(signatures.render_as_notes::<Elf>(endian))
+    signatures.render_as_notes::<Elf>(endian)
 }

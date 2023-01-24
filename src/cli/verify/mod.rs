@@ -1,5 +1,5 @@
 use crate::{
-    signature::Signature,
+    data::{RekorBundle, Signature},
     utils::{
         elf::{process_elf, Kind},
         ElfType,
@@ -13,8 +13,12 @@ use crate::{
         validator::EnforceCertificateChain,
     },
 };
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context};
+use ecdsa::elliptic_curve::PublicKey;
+use ecdsa::VerifyingKey;
 use object::{elf, read::elf::ElfFile, Endianness};
+use p256::NistP256;
+use sigstore::rekor::{self, apis::configuration::Configuration};
 use std::ffi::OsString;
 use x509_parser::{
     der_parser::{oid, Oid},
@@ -68,12 +72,17 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
     // verify certificates, the certificates are ensured to:
     // * form a chain (subject signed by issuer)
     // * plus all checks from the provided enforcers
-    let certificates = verify_certificates(&signatures, &chain_enforcers).await;
+    let mut certificates = verify_certificates(&signatures, &chain_enforcers).await;
+
+    // verify rekor
+    verify_rekors(&mut certificates).await;
+
+    // dump
     log::trace!("Validation result: {certificates:#?}");
     if log::log_enabled!(log::Level::Info) {
-        for (signature, result) in &certificates {
+        for (signature, bundle, result) in &certificates {
             match result {
-                Ok(bundle) => {
+                Ok(()) => {
                     log::info!(
                         "Signature - OK, digest: {} - public key: {}",
                         base16::encode_lower(&signature.signature),
@@ -110,7 +119,7 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
     // check if there are some remaining
     let has_some = certificates
         .into_iter()
-        .filter_map(|r| r.1.ok())
+        .filter_map(|r| r.2.ok())
         .next()
         .is_some();
 
@@ -119,6 +128,51 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
     if !has_some {
         bail!("No valid signatures found");
     }
+
+    Ok(())
+}
+
+async fn verify_rekors<'c>(
+    input: &mut [(&'c Signature, &'c CertificateBundle<'c>, anyhow::Result<()>)],
+) {
+    for (signature, _, result) in input {
+        if result.is_err() {
+            continue;
+        }
+        if let Some(rekor) = &signature.rekor {
+            *result = verify_rekor(signature, rekor).await;
+        }
+    }
+}
+
+async fn verify_rekor(signature: &Signature, rekor: &RekorBundle) -> anyhow::Result<()> {
+    let cfg = Configuration::new();
+
+    let log_id = &rekor.entry_id;
+    let log = rekor::apis::entries_api::get_log_entry_by_uuid(&cfg, log_id)
+        .await
+        .context("fetch rekor log entry")?;
+    if &log.uuid != log_id {
+        bail!("ID of retrieved log entry does not match ID of requested log entry");
+    }
+
+    // fetch public key
+    // TODO: allow other means of providing the key
+    let public_key = rekor::apis::pubkey_api::get_public_key(&cfg, None).await?;
+    log::info!("Public key (PEM):\n{public_key}");
+    // TODO: probe the key type and then parse the correct one
+    let public_key: VerifyingKey<NistP256> = public_key.parse()?;
+    log::info!("Public key: {public_key:?}");
+
+    // validate entry
+    crate::verification::rekor::verify_entry::<_, ecdsa::Signature<_>>(&log, &public_key)?;
+
+    // decode record data
+
+    let body = log.decode_body()?;
+    log::info!("Body: {body:?}");
+
+    // done
 
     Ok(())
 }
@@ -150,7 +204,7 @@ fn signatures_from_file<Elf: ElfType>(data: &[u8]) -> anyhow::Result<Vec<Signatu
 async fn verify_certificates<'c, E>(
     signatures: &'c [(&'c Signature, CertificateBundle<'c>)],
     enforcer: &E,
-) -> Vec<(&'c Signature, anyhow::Result<&'c CertificateBundle<'c>>)>
+) -> Vec<(&'c Signature, &'c CertificateBundle<'c>, anyhow::Result<()>)>
 where
     E: CertificateChainEnforcer,
 {
@@ -158,10 +212,10 @@ where
 
     for (signature, bundle) in signatures {
         let result = match enforcer.enforce(bundle).await {
-            Ok(()) => Ok(bundle),
+            Ok(()) => Ok(()),
             Err(err) => Err(anyhow!(err)),
         };
-        results.push((*signature, result));
+        results.push((*signature, bundle, result));
     }
 
     results

@@ -1,7 +1,9 @@
-use super::Configuration;
-use crate::signature::{
-    DebugCertificateBundle, DigestFeeder, DigestSignerWrapper, Signature, SignatureNoteType,
-    SignerConfiguration, VerifyingKeyEncoding,
+use crate::{
+    data::{Configuration, DebugCertificateBundle, Signature},
+    signature::{
+        DigestFeeder, DigestSignerWrapper, SignatureNoteType, SignerConfiguration,
+        VerifyingKeyEncoding,
+    },
 };
 use anyhow::bail;
 use async_trait::async_trait;
@@ -97,7 +99,16 @@ pub async fn create_signer(
         .map(|r| r.map(|pem| pem.contents))
         .collect::<Result<Vec<_>, _>>()?;
 
-    log::warn!("Cert Bundle: {:?}", DebugCertificateBundle(&bundle));
+    log::warn!(
+        "Cert Bundle: {:?}",
+        DebugCertificateBundle(
+            bundle
+                .iter()
+                .map(|c| c.as_slice())
+                .collect::<Vec<_>>()
+                .as_slice()
+        )
+    );
     if log::log_enabled!(log::Level::Info) {
         let size: usize = bundle.iter().map(|der| der.len()).sum();
         log::info!("Cert bundle size: {size}");
@@ -117,7 +128,7 @@ pub async fn create_signer(
                 _,
             >::new(
                 keys,
-                SignatureNoteType::SignatureEcdsaP256Sha256,
+                Configuration::EcdsaP256Sha256,
                 bundle,
             ))))
         }
@@ -130,7 +141,7 @@ pub async fn create_signer(
                 _,
             >::new(
                 keys,
-                SignatureNoteType::SignatureEcdsaP384Sha384,
+                Configuration::EcdsaP384Sha384,
                 bundle,
             ))))
         }
