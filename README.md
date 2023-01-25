@@ -16,7 +16,7 @@ There is a bit of documentation in the [docs/](docs/) folder.
 
 ## State
 
-This is a PoC. It most likely is full of bugs and far from finished.
+This is a PoC. This is full of bugs and not finished. Also is the content format not stable.
 
 ## Usage (the idea)
 
