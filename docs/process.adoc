@@ -1,0 +1,398 @@
+= Signing ELF binaries: The procedure of signing and validating ELF binaries
+Jens Reimann <ctron@dentrassi.de>
+:sectanchors:
+:icons: font
+
+This document describes the procedure of signing and verifying ELF binaries.
+
+[preface]
+== Motivation
+
+Signing executables is often seen a restriction for "just running" an application, centrally controlling of what a
+user may, or may not execute.
+
+However, there is a second aspect to it, ensuring that a binary was not altered between the supplier creating the
+binary and the user executing it.
+
+The latter part also comes in handy when the user wants to validate metadata attached to the binary, created by the
+supplier.
+
+== Goals and non-goals
+
+=== Goals
+
+* Improve the integrity of the file between the process of creating and the moment it is being used
+* Provide easy to use tooling to make the effort as seamless as possible
+* Allow to enforce additional policies, as configured by the user
+* Be able to work offline
+
+=== Non-goals
+
+* Prevent a user from executing code, if that is really the wish of the user
+
+=== Example use cases
+
+Here are a few example use-cases which should be covered by this solution.
+
+==== Ensuring metadata wasn't altered
+
+An author provides additional metadata embedded in the binary (like a `cargo auditable` build). This information is
+part if the binary, but not of the code itself.
+
+Validating any information of this only makes sense if it is known that the binary was not altered after the information
+was created and embedded into the binary.
+
+==== Ensuring the program logic wasn't altered
+
+Assume a program checking something, printing out "ok" or "not ok" . If someone edited the binary, changing "not ok"
+to "ok", the application logic would have been compromised.
+
+== Procedure
+
+This section describes how the procedure should work{empty}footnote:[Most likely the code doesn't work that way, yet! If that is the case, that is a bug!].
+
+[NOTE]
+.The use of Sigstore and Rekor
+====
+Currently, this document assumes that Rekor is being used. It would be good to have additional/alternative
+implementations of this part of the process. But right now, the focus is on Sigstore, Fulcio and Rekor
+====
+
+=== Adding a signature
+
+Signing the binary consists of the following steps:
+
+* Create a digest of the ELF binary
+* Acquire a private key and certificate
+* Sign the digest with the private key to generate a signature
+* Publish the digest and certificate in a transparency log
+* Embed the following information into the ELF binary
+  ** Signature
+  ** Certificate
+  ** Transparency log information
+
+[#creating_a_digest_of_the_elf_binary]
+==== Creating a digest of the ELF binary
+
+As adding the signature information will alter the ELF binary, it is not possible to create a digest of the whole ELF
+file.
+
+Alternatively, we need to create a digest of the "relevant content".This can be compared to a "normalization" process,
+like one would do it when signing XML or JSON content.
+
+[IMPORTANT]
+.Relevant content
+====
+It is important that the digest includes all information that is relevant.While some parts of the file cannot be part
+of the digest process, it must be ensured that a possible attacker cannot modify parts of the un-digested parts of the
+file in a way that might circumvent the validation process.
+====
+
+The following parts (in the listed order), are part of the digest:
+
+* Header
+  ** Entry address
+* The data range of all sections
+  ** Except for the content of any signature section
+  ** Except for the content of the `.shstrtab` section
+* The string data of the `.shstrtab` section
+  ** Except the strings used by the signature section
+* The section headers
+  ** Except the section header of any signature section
+
+All data is fed into a digest algorithm in the endian byte order of the ELF binary.
+
+==== Acquiring a private key and certificate
+
+For the signature process, a private key and an X.509 certificate is required.
+
+Using Sigstore, a short-lived certificate is acquired from the Fulcio instance. This certificate is valid for a few
+minutes only, but can be used to sign the file.
+
+NOTE: In the future it may be possible to use an existing (long-lived) key & certificate as well.
+
+NOTE: Currently, only ECDSA P256 & SHA256 can be used. SHA384 cannot be used due to a limitation in Rekor.
+
+==== Signing the digest with the private key to generate a signature
+
+In order to create a signature, the existing digest is being signed with the key.
+
+==== Publishing the digest and certificate in a transparency log
+
+The digest, signature, and leaf certificate are being published in the Rekor log, using a "hashedrekord":
+
+[source,json5]
+----
+{
+  "kind": "hashedrekord",
+  "apiVersion": "0.0.1",
+  "spec": {
+    "signature": {
+      "content": "MEUCIH/UARGjC1v1yyU7ajpmNJ6/M5tJGnB91QqNVlHwnY4uAiEAhPwm43yMaeKEO4dSfjBZorJeYNoYtsycH49W4nm4DBQ=", // <1>
+      "public_key": "" // <2>
+    },
+    "data": {
+      "hash": {
+        "algorithm": "sha256", // <3>
+        "value": "0ed33c8de2f87f719186438f74485dcf722f5e343154e7a4d29d88bba29bf539" // <4>
+      }
+    }
+  }
+}
+----
+<1> The base64 encoded signature data in DER format
+<2> The base64 encoded, PEM encoded X.509 certificate{empty}footnote:[Yes, this is actually base64 encoded twice through the PEM encoding. And the "certificate" goes into the field "public_key"]
+<3> Fixed `sha256`. Currently, only `sha1` and `sha256` seem supported by Rekor. So we can only work with SHA256.
+<4> The base16 encoded digest
+
+The entry is created through an API call to `/api/v1/log/entries` using `POST` and the above payload. This will
+result in a "log entry" like this:
+
+[source,json5]
+----
+{
+  "uuid": "24296fb24b8ad77a791ce31c919e5966ccdfce4283d6425b20de98003f12e06970c8be053c73308c", // <1>
+  "body": "…", // <2>
+  "logId": "",
+  "logIndex": 0,
+  "integratedTime": 1674655787, // <3>
+  "verification": {
+    "signedEntryTimestamp": "" // <4>
+  },
+}
+----
+<1> A unique ID of the log entry (not a UUID)
+<2> The `hashedrekord` from the request, base64 encoded
+<3> Unix timestamp of the log entry
+<4> A base64 encoded signature of the digest of `body`, `integratedTime`, `logId`, and `logIndex`, signed with the
+Rekor instance's public key
+
+[#signature_data_structure]
+==== Signature data structure
+
+The information generated in the previous steps will be encoded into a signature struct and ASN.1 encoded:
+
+[source,asn1]
+----
+Signature :: = SEQUENCE {
+    type ENUMERATED { // <1>
+        0, // ECDSA P256 + SHA256
+        1  // ECDSA P384 + SHA384
+    }
+    publicKey OCTET STRING // <2>
+    signature OCTET STRING // <3>
+    certificateBundle SEQUENCE OF OCTET STRING // <4>
+    rekor OPTIONAL SEQUENCE {
+        entryId OCTET STRING
+    }
+}
+----
+<1> The type of the signature (impacts publicKey and signature format)
+<2> The public key, encoded in its format
+<3> The signature, encoded in its format
+
+The public key and signature encoding are ASN.1/DER in the case of ECDSA.Other types, which are currently not specified
+might have different encoding.That is why it is declared as `OCTET STRING`.
+
+[#embedding_information_into_the_elf_binary]
+==== Embedding information into the ELF binary
+
+The (ASN.1) encoded signature entries are encoded as "notes" in a "notes section" of the ELF binary.
+
+==== Notes section details
+
+The name of the section is `.note.signature-v1`.There must be only one section with this name in the file.
+
+There may be multiple note entries in this section.A signature entry has the namespace `Signature` and the type
+`0` (for ASN.1 encoded signature).
+
+It is possible to have other entries (and other namespaces) in this file, however they will be ignored.
+
+The descriptor (data) of the note entry is the ASN.1 encoded information from as described
+in <<signature_data_structure>>.
+
+==== Steps for adding the notes section
+
+As this means adding a new notes section, it also means altering the structure of the file, without breaking it.
+
+The required steps are:
+
+* Add a new string table entry for the section string table (`.note.signature-v1`)
+* Add a new notes section
+
+The following steps are performed to add the notes section:
+
+* Copy the existing `.shrstrtab` section to the end of the file
+* Append a string table entry for `.note.signature-v1`
+* Append the signature data to the end of the file
+* Copy the existing section headers to the end of the file, removing any existing signature notes section
+* Append a new section header for the signature notes section
+* Update the `.shrstrtab` offset and length in the header
+* Update the section header offset (`e_shoff`) and num (`e_shnum`) in the ELF file header
+
+This is a minimal invasive approach. It leaves all the data in place, creates copies (appending additions) of the
+altered parts, and adjusts the pointers in the file header. While this leaves the old data in place, this is ok for
+ELF files, as it uses pointers (offsets) to point to the correct data. However, it doesn't even touch all the other
+content.
+
+=== Verifying a signature
+
+The following steps need to take in order to verify a signature:
+
+* Create a digest of the ELF binary
+* Extract the signature information
+* Verify the signature information
+* Verify the certificate transparency log
+
+Creating a digest works exactly as described before in <<creating_a_digest_of_the_elf_binary>>.
+
+TIP: During the process, if something goes wrong, a field cannot be parsed, information is missing, then the current
+step will be considered failed. This doesn't need to fail the whole operation, but at least the processing of the
+current item. In the end, this may lead to an overall failure, due to a lack of information.
+
+==== Extracting the signature information
+
+The file is scanned for a notes section containing signature information. This is a reverse process of the
+process described in <<embedding_information_into_the_elf_binary>>.
+
+NOTE: The information extract cannot be trusted before it was verified.
+
+==== Verifying the signature information
+
+The extracted signature information is verified as follows:
+
+* Verify the evaluated digest (of the signed binary) with the public key and signature from the signature entry
++
+=> This tells us if the file was signed with this public key. However, we cannot yet trust the public key.
+* Compare the public key from the signature entry with the public key from the certificate in the signature entry
++
+This is a bit of a redundancy. However, it allows one to check the signature without parsing the full certificate
+{empty}footnote:[Might consider dropping the redundancy and use the public key from the certificate, now that we use
+DER encoding anyway].
++
+=> This tells us if the certificate was the one that provided the public key.
+
+Next, the certificate chain is evaluated:
+
+* Verify that the certificate bundle builds a chain, or is a self-signed certificate
+  ** Starting from first to last, ensure that each subject is signed by its issuer (the next certificate in the chain)
+  ** Ensure that root and intermediate certificates have the "CA" flag set
+  ** NOTE: A bunch of more tests, but don't test the validity period
+* Ensure that the root certificate (or self-signed) is one that we consider "trusted"
+
+[NOTE]
+.Validity period check
+====
+We cannot check the validity period of the certificates, because that would mean that binaries that are out of
+the validity period would no longer be valid. Having a short-lived certificate might mean that this would already be
+the case a few minutes after the file was signed.
+
+Having a validity check against "now" makes sense when e.g. establishing a connection. As we want to ensure that the
+remote side can _now_ prove to use that it knows the private key.
+
+In the case of code-signing, we however want to prove that the issuer knew the private key at the point in time when
+the binary was signed, not when we want to inspect or run it.
+====
+
+=> This tells us that the ELF binary was signed with a public key that was signed by a root that we consider
+trustworthy. However, we don't know "when" this happened, as we skipped the validity period check.
+
+==== Verifying the certificate transparency log
+
+===== Offline mode
+
+To be written …
+
+But I think this boils down to storing the log entry inside the ELF binary, and using this, instead of fetching it
+from rekor.
+
+Continue with <<performing_the_validation>>.
+
+===== Online mode
+
+Using the encoded "entry ID" field from the "rekor" bundle information, which comes from the signature entry of the ELF
+binary, we fetch the log entry and the public key from the public Rekor instance.
+
+Continue with <<performing_the_validation>>.
+
+[#performing_the_validation]
+===== Perform the validation
+
+First, we need to validate the rekor log entry:
+
+* *FIXME:* "verify inclusion"
+* *FIXME:* "verify checkpoint signature"
+* Verify the signed time data (SET)
++
+--
+  ** Build a normalized (JCS) object of `logId`, `logIndex`, `body` and `integratedTimestamp`
+  ** Digest the object and validate the signature using Rekor's public key
+--
++
+=> From this we know that the combination of `logId`, `logIndex`, `body` and `integratedTimestamp` has been signed
+by Rekor at the time of the "integrated timestamp".
+
+WARNING: Don't we miss a link between the "uuid" and the signature of the log entry here?
+
+Next, we can correlate the ELF binary signature with the log entry:
+
+* Verify that the certificate from the log entry's body structure is the same as the leaf/first certificate of the
+  certificate bundle in the signature entry
+  => With this we know that the certificate was presented to the Rekor instance at the time of `integratedTimestamp`
+* Verify that the validity period of the leaf/first certificate was valid at the time of `integratedTimestamp`
+  => With this we know that the certificate was valid at the time it was presented to the Rekor instance
+
+WARNING: We still need a correlation between the current digest of the file and the log entry. We should compare the
+evaluated digest of the file with the digest/hash stored in the log entry, which got signed by Rekor.
+
+
+
+[appendix]
+== Alternatives
+
+The goals mentioned above could also be achieves through alternative approaches. Here is some reasoning.
+
+=== Adjacent signatures
+
+> Why not just sign the whole blob? Just create a signature file?
+
+That has already been done. But is not really being used.
+
+That a look a Maven signing: each Maven artifact gets signed. That is even a requirement for uploading it to maven
+central. However, most people do not verify those signatures.
+
+On the other side, JARs have been signed in the past. And that technology saw some adoption. Same for signed RPMs.
+
+True, the fact that signature information is adjacent to the actual artifact isn't the only factor contribution to the
+non-adoption. However, I strongly believe that tooling is. RPMs get validated automatically during the installation
+process. Same for signed JARs, when installing Eclipse IDE plugins. Or think about a Windows (or macOS) binary. That
+process happens automatically, and the user actually needs to opt-out of the process.
+
+Just imagine users would need to download an additional `.sig` file for Windows binaries.
+
+So embedding the signatures makes the process more complex on the technical side, but simpler on the user side. Which
+might be a factor for increasing adoption.
+
+=== Re-using an existing packager manager
+
+RPM in combination with YUM/DNF already provides a way to get binaries from a supplier to a user. It is also possible
+to verify the integrity of the file later on. Not only the binary itself, but also all kinds of file which might be
+shipped alongside the binary.
+
+It also is possible to create RPMs for "custom applications", which are not part of the OS distribution. Having the
+same features.
+
+The downside is, that different distributions use different package managers. So a supplier has additional work to do,
+in order to support multiple package managers. This results in people just publishing binaries through GitHub releases.
+
+Using `elfsign`, the same artifact can be shipped to multiple Linux flavours.
+
+[glossary]
+== Glossary
+
+[glossary]
+ELF:: Executable and Linkable Format
+ELF binary:: A runnable binary in the ELF format.
+Rekor:: Software supply chain transparency log: https://github.com/sigstore/rekor
+RPM:: Red Hat Packager Manager
+JCS::
