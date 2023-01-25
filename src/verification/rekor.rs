@@ -7,6 +7,10 @@ use sigstore::rekor::models::LogEntry;
 
 pub struct VerifiedInformation {}
 
+/// Data which flows into the signed entry timestamp (SET).
+///
+/// NOTE: The order and names of these fields are important, as the `to_canonicalized_string` builds
+/// on this.
 #[derive(serde::Deserialize, serde::Serialize)]
 struct SignedTimeData<'d> {
     #[serde(rename = "body")]
@@ -20,7 +24,10 @@ struct SignedTimeData<'d> {
 }
 
 impl<'d> SignedTimeData<'d> {
+    /// Generate a canonicalized JSON string (JCS)
     pub fn to_canonicalized_string(&self) -> Result<String, serde_json::Error> {
+        // serde (without pretty print) and the order of the fields in the struct
+        // ensure that we already get a canonicalized string, there is no additional work here
         serde_json::to_string(self)
     }
 
