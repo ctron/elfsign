@@ -1,4 +1,4 @@
-use crate::data::{RekorBundle, Signature};
+use crate::data::Signature;
 use ::der::asn1::OctetString;
 use ::digest::{Digest, Update};
 use anyhow::anyhow;
@@ -146,8 +146,7 @@ where
         let leaf_certificate = certificate_bundle
             .first()
             .ok_or_else(|| anyhow!("certificate bundle was empty"))?;
-        let (entry_id, rekor_bundle) =
-            publish::publish(&publish_digest, leaf_certificate, &signature).await?;
+        let rekor = publish::publish(&publish_digest, leaf_certificate, &signature).await?;
 
         // signature entry
         let signature = Signature {
@@ -158,7 +157,7 @@ where
                 .into_iter()
                 .map(OctetString::new)
                 .collect::<Result<Vec<_>, _>>()?,
-            rekor: Some(RekorBundle { entry_id }),
+            rekor: Some(rekor),
         };
 
         // done

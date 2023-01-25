@@ -14,15 +14,16 @@ use crate::{
     },
 };
 use anyhow::{anyhow, bail, Context};
-use ecdsa::elliptic_curve::PublicKey;
 use ecdsa::VerifyingKey;
 use object::{elf, read::elf::ElfFile, Endianness};
 use p256::NistP256;
-use sigstore::rekor::{self, apis::configuration::Configuration};
+use sigstore::rekor::{self, apis::configuration::Configuration, models::Hashedrekord};
 use std::ffi::OsString;
 use x509_parser::{
     der_parser::{oid, Oid},
+    parse_x509_certificate,
     prelude::ParsedExtension,
+    time::ASN1Time,
 };
 
 const OID_SAN: Oid = oid!(2.5.29 .17);
@@ -132,6 +133,7 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// verify the rekor section for each signature entry
 async fn verify_rekors<'c>(
     input: &mut [(&'c Signature, &'c CertificateBundle<'c>, anyhow::Result<()>)],
 ) {
@@ -141,13 +143,31 @@ async fn verify_rekors<'c>(
         }
         if let Some(rekor) = &signature.rekor {
             *result = verify_rekor(signature, rekor).await;
+        } else {
+            *result = Err(anyhow!("missing rekor information"));
+            // TODO: find another way to validate without Rekor (maybe RFC 3161?)
         }
     }
 }
 
+/// Verify the rekor bundle used in the signature
+///
+/// This will:
+///
+/// * look up the rekor log entry
+/// * lookup the public key of the rekor instance
+/// * verify that the log entry is valid (see [`crate::verification::rekor::verify_entry`])
+/// * ensure that the certificate of the log entry matches the certificate of the signature
+/// * ensure that the certificate of the signature was valid at the time of the log entry
+///
+/// This ensures:
+///
+/// * that the signature was signed at a time the certificate was valid
+///
 async fn verify_rekor(signature: &Signature, rekor: &RekorBundle) -> anyhow::Result<()> {
     let cfg = Configuration::new();
 
+    // TODO: allow using an offline bundle
     let log_id = &rekor.entry_id;
     let log = rekor::apis::entries_api::get_log_entry_by_uuid(&cfg, log_id)
         .await
@@ -157,20 +177,55 @@ async fn verify_rekor(signature: &Signature, rekor: &RekorBundle) -> anyhow::Res
     }
 
     // fetch public key
+
     // TODO: allow other means of providing the key
     let public_key = rekor::apis::pubkey_api::get_public_key(&cfg, None).await?;
     log::info!("Public key (PEM):\n{public_key}");
-    // TODO: probe the key type and then parse the correct one
+    // TODO: probe the key type and then parse the correct type
     let public_key: VerifyingKey<NistP256> = public_key.parse()?;
     log::info!("Public key: {public_key:?}");
 
     // validate entry
-    crate::verification::rekor::verify_entry::<_, ecdsa::Signature<_>>(&log, &public_key)?;
+
+    let verified =
+        crate::verification::rekor::verify_entry::<_, ecdsa::Signature<_>>(&log, &public_key)?;
 
     // decode record data
 
-    let body = log.decode_body()?;
+    let body: Hashedrekord = serde_json::from_slice(&verified.body)?;
     log::info!("Body: {body:?}");
+
+    // validate certificate (binary == log entry)
+
+    let certificate_from_log = pem::parse(body.spec.signature.public_key.decode()?)?.contents;
+    let certificate_from_binary = signature
+        .certificate_bundle
+        .first()
+        .ok_or_else(|| anyhow!("missing leaf certificate"))?;
+
+    if certificate_from_log != certificate_from_binary.as_bytes() {
+        bail!(
+            "certificate mismatch: certificate of binary does not match certificate of log entry"
+        );
+    }
+
+    // parse the certificate
+
+    let certificate_from_binary = parse_x509_certificate(certificate_from_binary.as_bytes())?.1;
+
+    // ensure that the certificate was valid at the point when the log entry was created
+
+    if !certificate_from_binary
+        .validity
+        .is_valid_at(ASN1Time::new(verified.timestamp))
+    {
+        bail!("signing certificate was not valid when the log entry was created");
+    }
+
+    /*
+     * => from now on we know that the certificate found in the signature was indeed used at the
+     * time the certificate was valid.
+     */
 
     // done
 

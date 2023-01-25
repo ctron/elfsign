@@ -15,7 +15,7 @@ pub async fn publish(
     digest: &[u8],
     certificate: &[u8],
     signature: &[u8],
-) -> anyhow::Result<(String, Option<RekorBundle>)> {
+) -> anyhow::Result<RekorBundle> {
     let cfg = Configuration::default();
 
     const TAG: &str = "CERTIFICATE";
@@ -68,8 +68,5 @@ pub async fn publish(
     };
     log::info!("Rekor log entry: {log:#?}");
 
-    // FIXME: build a bundle
-    let bundle = None;
-
-    Ok((log.uuid, bundle))
+    Ok(log.into())
 }

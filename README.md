@@ -45,5 +45,6 @@ elfsign verify my-bin-signed
 * [x] Improve storing stuff, this is a mess right now (good for now)
 * [ ] Implement verify
   * [x] verify the signature
-  * [ ] add the certificate, and allow enforcing policies 
+  * [x] add the certificate, and allow enforcing policies 
 * [x] check using "digest" vs "digested signer"
+* [ ] allow more options, currently this is highly opinionated towards sigstore and rekor
