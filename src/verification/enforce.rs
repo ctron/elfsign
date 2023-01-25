@@ -177,6 +177,10 @@ impl CertificateEnforcer for StandardEnforcer {
     ) -> anyhow::Result<()> {
         self.enforce_common(certificate)?;
 
+        if !certificate.is_ca() {
+            bail!("intermediate certificate is not a CA");
+        }
+
         Ok(())
     }
 
