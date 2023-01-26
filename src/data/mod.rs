@@ -7,6 +7,7 @@ use base64::display::Base64Display;
 use der::{asn1::OctetString, Encode, Sequence};
 use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
+use std::ops::{Deref, DerefMut};
 
 mod config;
 mod rekor;
@@ -16,14 +17,17 @@ pub use rekor::*;
 
 /// A signature, stored as a note section entry
 ///
-/// ## Encoding
+/// ## Encoding (ASN.1)
 ///
-/// ```
+/// ```asn1
 /// Signature :: = SEQUENCE {
 ///   type ENUMERATED { /* see Configuration enum */ }
 ///   publicKey OCTET STRING
 ///   signature OCTET STRING
-///   certificateBundle SEQUENCE OF BIT STRING
+///   certificateBundle SEQUENCE OF OCTET STRING
+///   rekor OPTIONAL SEQUENCE {
+///     entryId OCTET STRING
+///   }
 /// }
 /// ```
 ///
@@ -43,6 +47,29 @@ pub struct Signature {
 
     /// A rekor bundle, can be used to verify through rekor
     pub rekor: Option<RekorBundle>,
+}
+
+/// A signature entry, extracted from the ELF binary
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExtractedSignature {
+    /// The entry read from the file
+    pub signature: Signature,
+    /// The digest, evaluated from the file, using the same algorithm as the signature used
+    pub digest: Vec<u8>,
+}
+
+impl Deref for ExtractedSignature {
+    type Target = Signature;
+
+    fn deref(&self) -> &Self::Target {
+        &self.signature
+    }
+}
+
+impl DerefMut for ExtractedSignature {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.signature
+    }
 }
 
 pub struct DebugCertificateBundle<'d>(pub &'d [&'d [u8]]);
@@ -74,8 +101,7 @@ impl Debug for Signature {
             .field(
                 "certificate_bundle",
                 &DebugCertificateBundle(
-                    &self
-                        .certificate_bundle
+                    self.certificate_bundle
                         .iter()
                         .map(|s| s.as_bytes())
                         .collect::<Vec<_>>()

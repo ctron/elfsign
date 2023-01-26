@@ -1,4 +1,4 @@
-use crate::data::Signature;
+use crate::data::{DigestAlgorithm, Signature};
 use ::der::asn1::OctetString;
 use ::digest::{Digest, Update};
 use anyhow::anyhow;
@@ -8,6 +8,7 @@ use ecdsa::{
     elliptic_curve::{generic_array::ArrayLength, FieldSize},
     PrimeCurve, SignatureSize,
 };
+use sha2::{Sha256, Sha384};
 use signature::{DigestSigner, SignatureEncoding};
 use std::{fmt::Debug, marker::PhantomData, ops::Add};
 
@@ -54,6 +55,7 @@ pub type DigestFeeder<'f> = Box<dyn FnOnce(&mut dyn Update) -> anyhow::Result<()
 #[async_trait(?Send)]
 pub trait SignerConfiguration {
     async fn sign<'f>(&self, f: DigestFeeder<'f>) -> anyhow::Result<Signature>;
+    fn digest_algorithm(&self) -> DigestAlgorithm;
 }
 
 pub trait VerifyingKeyEncoding {
@@ -94,9 +96,25 @@ impl CertificateBundleEncoding for Vec<Vec<u8>> {
     }
 }
 
+pub trait DigestInformation {
+    fn algorithm() -> DigestAlgorithm;
+}
+
+impl DigestInformation for Sha256 {
+    fn algorithm() -> DigestAlgorithm {
+        DigestAlgorithm::Sha256
+    }
+}
+
+impl DigestInformation for Sha384 {
+    fn algorithm() -> DigestAlgorithm {
+        DigestAlgorithm::Sha384
+    }
+}
+
 pub struct DigestSignerWrapper<D, S, DS, CBE>
 where
-    D: Digest + Clone,
+    D: Digest + DigestInformation + Clone,
     DS: DigestSigner<D, S> + VerifyingKeyEncoding,
     CBE: CertificateBundleEncoding,
 {
@@ -108,7 +126,7 @@ where
 
 impl<D, S, DS, CBE> DigestSignerWrapper<D, S, DS, CBE>
 where
-    D: Digest + Clone,
+    D: Digest + DigestInformation + Clone,
     DS: DigestSigner<D, S> + VerifyingKeyEncoding,
     CBE: CertificateBundleEncoding,
 {
@@ -125,7 +143,7 @@ where
 #[async_trait(?Send)]
 impl<D, S, DS, CBE> SignerConfiguration for DigestSignerWrapper<D, S, DS, CBE>
 where
-    D: Digest + Update + Clone,
+    D: Digest + DigestInformation + Update + Clone,
     DS: DigestSigner<D, S> + VerifyingKeyEncoding,
     S: DerSignatureEncoding,
     CBE: CertificateBundleEncoding,
@@ -146,7 +164,13 @@ where
         let leaf_certificate = certificate_bundle
             .first()
             .ok_or_else(|| anyhow!("certificate bundle was empty"))?;
-        let rekor = publish::publish(&publish_digest, leaf_certificate, &signature).await?;
+        let rekor = publish::publish(
+            self.digest_algorithm(),
+            &publish_digest,
+            leaf_certificate,
+            &signature,
+        )
+        .await?;
 
         // signature entry
         let signature = Signature {
@@ -162,5 +186,9 @@ where
 
         // done
         Ok(signature)
+    }
+
+    fn digest_algorithm(&self) -> DigestAlgorithm {
+        D::algorithm()
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    data::{Configuration, Signature},
+    data::{Configuration, ExtractedSignature, Signature},
     signature::{
         digest::digest, DerSignatureEncoding, SignatureNoteType, ELF_NOTE_SIGNATURE_V1_NAMESPACE,
         SIGNATURE_V1_SECTION,
@@ -36,7 +36,7 @@ use std::ops::Add;
 pub fn verify_signatures<Elf: ElfType>(
     file: &ElfFile<Elf::File>,
     signatures: Vec<Signature>,
-) -> anyhow::Result<Vec<Signature>> {
+) -> anyhow::Result<Vec<ExtractedSignature>> {
     let mut result = Vec::new();
 
     for (i, signature) in signatures.into_iter().enumerate() {
@@ -57,11 +57,11 @@ fn verify_ecsa_entry<Elf, D, C>(
     i: usize,
     file: &ElfFile<Elf::File>,
     signature: Signature,
-    result: &mut Vec<Signature>,
+    result: &mut Vec<ExtractedSignature>,
 ) -> anyhow::Result<()>
 where
     Elf: ElfType,
-    D: Digest + Update + FixedOutput<OutputSize = FieldSize<C>>,
+    D: Digest + Update + FixedOutput<OutputSize = FieldSize<C>> + Clone,
     C: PrimeCurve + AssociatedOid + ProjectiveArithmetic + PointCompression,
 
     SignatureSize<C>: ArrayLength<u8>,
@@ -76,8 +76,8 @@ where
     digest(&mut d, file)?;
 
     let verifier = VerifyingKey::<C>::from_public_key_der(signature.public_key.as_bytes())?;
-    match verify_signature::<_, ecdsa::Signature<C>, _>(&verifier, d, &signature) {
-        Ok(()) => {
+    match verify_signature::<_, ecdsa::Signature<C>, _>(&verifier, d, signature) {
+        Ok(signature) => {
             result.push(signature);
         }
         Err(err) => {
@@ -97,12 +97,12 @@ where
 fn verify_signature<V, S, D>(
     verifier: &V,
     digest: D,
-    signature_entry: &Signature,
-) -> anyhow::Result<()>
+    signature_entry: Signature,
+) -> anyhow::Result<ExtractedSignature>
 where
     V: DigestVerifier<D, S>,
     S: DerSignatureEncoding,
-    D: Digest,
+    D: Digest + Clone,
 {
     // parse the signature
 
@@ -112,6 +112,10 @@ where
             bail!("failed to parse signature");
         }
     };
+
+    // record digest for later
+
+    let digest_value = digest.clone().finalize().to_vec();
 
     // verify by digest
 
@@ -152,7 +156,10 @@ where
 
     // done
 
-    Ok(())
+    Ok(ExtractedSignature {
+        signature: signature_entry,
+        digest: digest_value,
+    })
 }
 
 /// Extract signatures stored in an elf binary.

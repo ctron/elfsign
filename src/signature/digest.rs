@@ -71,7 +71,6 @@ where
                 continue;
             }
             if name == ".shstrtab" {
-                // FIXME: we need to find a way to deal with this
                 // only digest the strings, but ignore the SIGNATURE_V1_SECTION string
                 // record this for later
                 section_header_string_table = Some(section);
@@ -94,7 +93,10 @@ where
         }
 
         // process the section headers string table last
+
         self.digest_shstrtab(section_header_string_table)?;
+
+        // FIXME: add section headers
 
         // done
 

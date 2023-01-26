@@ -83,7 +83,6 @@ async fn created_signed_file<'data, Elf: ElfType<Endian = Endianness>>(
     let new_e_shstrndx_offset = out.len();
     out.extend(shstrtab.data(endian, in_data)?);
     // append SIGNATURE_HEADER
-    //let sig_section_name_index = out.len() - new_e_shstrndx_offset;
     let sig_section_name_index = out.len() - new_e_shstrndx_offset;
     out.extend(SIGNATURE_V1_SECTION.as_bytes());
     out.push(b'\0');
@@ -111,7 +110,7 @@ async fn created_signed_file<'data, Elf: ElfType<Endian = Endianness>>(
     ));
     new_section_header_count += 1;
 
-    // update .shrstrtab offset (before coping section header table)
+    // update .shrstrtab offset
     patch_section_header::<Elf>(
         new_section_header_offset,
         &mut out,

@@ -1,4 +1,4 @@
-use crate::data::RekorBundle;
+use crate::data::{DigestAlgorithm, RekorBundle};
 use anyhow::bail;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sigstore::rekor::{
@@ -12,10 +12,22 @@ use sigstore::rekor::{
 
 /// publish the digest
 pub async fn publish(
+    digest_algorithm: DigestAlgorithm,
     digest: &[u8],
     certificate: &[u8],
     signature: &[u8],
 ) -> anyhow::Result<RekorBundle> {
+    let algorithm = match digest_algorithm {
+        DigestAlgorithm::Sha256 => AlgorithmKind::sha256,
+        _ => {
+            bail!(
+                "Unsupported digest algorithm for using Rekor - actual: {:?} possible: {:?}",
+                digest_algorithm,
+                &[DigestAlgorithm::Sha256]
+            );
+        }
+    };
+
     let cfg = Configuration::default();
 
     const TAG: &str = "CERTIFICATE";
@@ -46,7 +58,7 @@ pub async fn publish(
                 public_key: PublicKey::new(public_key),
             },
             data: Data {
-                hash: Hash::new(AlgorithmKind::sha256, base16::encode_lower(digest)),
+                hash: Hash::new(algorithm, base16::encode_lower(digest)),
             },
         },
     };

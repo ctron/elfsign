@@ -1,5 +1,5 @@
 use crate::{
-    data::{RekorBundle, Signature},
+    data::{self, ExtractedSignature, RekorBundle},
     utils::{
         elf::{process_elf, Kind},
         ElfType,
@@ -17,8 +17,13 @@ use anyhow::{anyhow, bail, Context};
 use ecdsa::VerifyingKey;
 use object::{elf, read::elf::ElfFile, Endianness};
 use p256::NistP256;
-use sigstore::rekor::{self, apis::configuration::Configuration, models::Hashedrekord};
-use std::ffi::OsString;
+use serde_json::Value;
+use sigstore::rekor::{
+    self,
+    apis::configuration::Configuration,
+    models::{hashedrekord::Hash, Hashedrekord},
+};
+use std::{ffi::OsString, ops::Deref};
 use x509_parser::{
     der_parser::{oid, Oid},
     parse_x509_certificate,
@@ -31,6 +36,13 @@ const OID_SAN: Oid = oid!(2.5.29 .17);
 #[derive(Clone, Debug)]
 pub struct Options {
     pub input: OsString,
+}
+
+#[derive(Debug)]
+struct ValidationResult<'a> {
+    signature: &'a ExtractedSignature,
+    certificate_bundle: &'a CertificateBundle<'a>,
+    result: anyhow::Result<()>,
 }
 
 pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
@@ -81,16 +93,21 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
     // dump
     log::trace!("Validation result: {certificates:#?}");
     if log::log_enabled!(log::Level::Info) {
-        for (signature, bundle, result) in &certificates {
+        for ValidationResult {
+            signature,
+            certificate_bundle,
+            result,
+        } in &certificates
+        {
             match result {
                 Ok(()) => {
                     log::info!(
-                        "Signature - OK, digest: {} - public key: {}",
-                        base16::encode_lower(&signature.signature),
+                        "Signature - OK, signature: {} - public key: {}",
+                        base16::encode_lower(&signature.signature.signature),
                         base16::encode_lower(&signature.public_key)
                     );
-                    log::info!("Certificates (#{}):", bundle.len());
-                    for (i, cert) in bundle.iter().enumerate() {
+                    log::info!("Certificates (#{}):", certificate_bundle.len());
+                    for (i, cert) in certificate_bundle.iter().enumerate() {
                         log::info!("  {i: >3}: Subject: {}", cert.subject);
                         log::info!("       Issuer: {}", cert.issuer);
                         log::info!("       Serial: {}", cert.raw_serial_as_string());
@@ -109,7 +126,7 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
                     log::info!(
                         "Signature - failed({}), digest: {} - public key: {}",
                         err,
-                        base16::encode_lower(&signature.signature),
+                        base16::encode_lower(&signature.signature.signature),
                         base16::encode_lower(&signature.public_key)
                     );
                 }
@@ -120,7 +137,7 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
     // check if there are some remaining
     let has_some = certificates
         .into_iter()
-        .filter_map(|r| r.2.ok())
+        .filter_map(|r| r.result.ok())
         .next()
         .is_some();
 
@@ -134,10 +151,11 @@ pub(crate) async fn run(options: Options) -> anyhow::Result<()> {
 }
 
 /// verify the rekor section for each signature entry
-async fn verify_rekors<'c>(
-    input: &mut [(&'c Signature, &'c CertificateBundle<'c>, anyhow::Result<()>)],
-) {
-    for (signature, _, result) in input {
+async fn verify_rekors(input: &mut [ValidationResult<'_>]) {
+    for ValidationResult {
+        signature, result, ..
+    } in input
+    {
         if result.is_err() {
             continue;
         }
@@ -164,7 +182,7 @@ async fn verify_rekors<'c>(
 ///
 /// * that the signature was signed at a time the certificate was valid
 ///
-async fn verify_rekor(signature: &Signature, rekor: &RekorBundle) -> anyhow::Result<()> {
+async fn verify_rekor(signature: &ExtractedSignature, rekor: &RekorBundle) -> anyhow::Result<()> {
     let cfg = Configuration::new();
 
     // TODO: allow using an offline bundle
@@ -223,17 +241,61 @@ async fn verify_rekor(signature: &Signature, rekor: &RekorBundle) -> anyhow::Res
     }
 
     /*
-     * => from now on we know that the certificate found in the signature was indeed used at the
-     * time the certificate was valid.
+     * => from now on we know that the certificate found in the signature was presented to Rekor
+     * at the time of the log entry. But we still don't have a correlation between the log entry
+     * and the ELF file
      */
+
+    // evaluate digest
+
+    let (hash_algorithm, hash_value) = extract_hash(&body.spec.data.hash)?;
+    log::debug!("Hash: {hash_algorithm} / {hash_value:?}");
+    match (signature.r#type, hash_algorithm.deref()) {
+        (data::Configuration::EcdsaP256Sha256, "sha256") => {}
+        _ => {
+            bail!(
+                r#"Unsupported hash configuration - actual: {}, supported: ["sha256s"]"#,
+                signature.r#type
+            );
+        }
+    }
+
+    if signature.digest != hash_value {
+        bail!(
+            "Digest mismatch - signature: {}, logEntry: {}",
+            base16::encode_lower(&signature.digest),
+            base16::encode_lower(&hash_value)
+        );
+    }
 
     // done
 
     Ok(())
 }
 
+/// Extract the algorithm and hash value from the "hash" section.
+///
+/// TODO: remove this once a new version of sigstore-rs is releases, which makes those fields
+/// public.
+fn extract_hash(hash: &Hash) -> anyhow::Result<(String, Vec<u8>)> {
+    let json = serde_json::to_value(hash)?;
+    match (
+        json.get("algorithm").and_then(Value::as_str),
+        json.get("value")
+            .and_then(Value::as_str)
+            .map(base16::decode),
+    ) {
+        (Some(algorithm), Some(Ok(value))) => Ok((algorithm.to_string(), value)),
+        _ => {
+            bail!("Unable to decode 'Hash' structure")
+        }
+    }
+}
+
 /// parse all signatures into an array of signature plus certificate bundle
-fn parse_x509(signatures: &[Signature]) -> anyhow::Result<Vec<(&Signature, CertificateBundle)>> {
+fn parse_x509(
+    signatures: &[ExtractedSignature],
+) -> anyhow::Result<Vec<(&ExtractedSignature, CertificateBundle)>> {
     let mut result = Vec::with_capacity(signatures.len());
     for signature in signatures {
         result.push((
@@ -246,7 +308,7 @@ fn parse_x509(signatures: &[Signature]) -> anyhow::Result<Vec<(&Signature, Certi
 }
 
 /// extract signatures from an elf binary
-fn signatures_from_file<Elf: ElfType>(data: &[u8]) -> anyhow::Result<Vec<Signature>> {
+fn signatures_from_file<Elf: ElfType>(data: &[u8]) -> anyhow::Result<Vec<ExtractedSignature>> {
     let file = ElfFile::parse(data)?;
     let signatures = extract_signatures::<Elf>(file.raw_header(), data)?;
 
@@ -257,20 +319,24 @@ fn signatures_from_file<Elf: ElfType>(data: &[u8]) -> anyhow::Result<Vec<Signatu
 }
 
 async fn verify_certificates<'c, E>(
-    signatures: &'c [(&'c Signature, CertificateBundle<'c>)],
+    signatures: &'c [(&'c ExtractedSignature, CertificateBundle<'c>)],
     enforcer: &E,
-) -> Vec<(&'c Signature, &'c CertificateBundle<'c>, anyhow::Result<()>)>
+) -> Vec<ValidationResult<'c>>
 where
     E: CertificateChainEnforcer,
 {
     let mut results = Vec::with_capacity(signatures.len());
 
-    for (signature, bundle) in signatures {
-        let result = match enforcer.enforce(bundle).await {
+    for (signature, certificate_bundle) in signatures {
+        let result = match enforcer.enforce(certificate_bundle).await {
             Ok(()) => Ok(()),
             Err(err) => Err(anyhow!(err)),
         };
-        results.push((*signature, bundle, result));
+        results.push(ValidationResult {
+            signature,
+            certificate_bundle,
+            result,
+        });
     }
 
     results

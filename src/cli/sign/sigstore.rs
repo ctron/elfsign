@@ -1,5 +1,5 @@
 use crate::{
-    data::{Configuration, DebugCertificateBundle, Signature},
+    data::{Configuration, DebugCertificateBundle, DigestAlgorithm, Signature},
     signature::{
         DigestFeeder, DigestSignerWrapper, SignatureNoteType, SignerConfiguration,
         VerifyingKeyEncoding,
@@ -81,6 +81,10 @@ pub struct BoxedSignerConfiguration(Box<dyn SignerConfiguration>);
 impl SignerConfiguration for BoxedSignerConfiguration {
     async fn sign<'f>(&self, f: DigestFeeder<'f>) -> anyhow::Result<Signature> {
         self.0.sign(f).await
+    }
+
+    fn digest_algorithm(&self) -> DigestAlgorithm {
+        self.0.digest_algorithm()
     }
 }
 

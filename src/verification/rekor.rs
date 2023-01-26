@@ -62,11 +62,10 @@ impl<'d> From<&'d LogEntry> for SignedTimeData<'d> {
 fn extract_signed_time(log: &LogEntry) -> anyhow::Result<String> {
     let json = serde_json::to_value(&log.verification)?;
 
-    Ok(json
-        .get("signedEntryTimestamp")
+    json.get("signedEntryTimestamp")
         .and_then(|s| s.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| anyhow!("missing field 'signedEntryTimestamp'"))?)
+        .ok_or_else(|| anyhow!("missing field 'signedEntryTimestamp'"))
 }
 
 /// Verify a rekor log entry.
@@ -100,7 +99,7 @@ where
         .to_canonicalized_string()
         .context("build signed time data structure")?;
     let signature = extract_signed_time(log)?;
-    let signature = STANDARD.decode(&signature)?;
+    let signature = STANDARD.decode(signature)?;
     let s = S::try_from_der(&signature)?;
 
     log::info!("Verify: '{}'", c);
